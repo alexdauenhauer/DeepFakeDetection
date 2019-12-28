@@ -9,210 +9,145 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import skvideo.io
+
+from DataPrep import DataPrep
+
 
 # %%
-# def vid2array(filepath):
+
+
+# def getFaces(frame,
+#              flow=None,
+#              grayscale=True,
+#              scaleFactor=(1.5, 1.3),
+#              minNeighbors=(2, 1)):
+#     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+#     ff_sf, fp_sf = scaleFactor
+#     ff_mn, fp_mn = minNeighbors
+#     faces_rois = FF.detectMultiScale(
+#         image=gray,
+#         scaleFactor=ff_sf,
+#         minNeighbors=ff_mn
+#     )
+#     if len(faces_rois) < 1:
+#         faces_rois = FP.detectMultiScale(
+#             image=gray,
+#             scaleFactor=fp_sf,
+#             minNeighbors=fp_mn
+#         )
+#     rgb_faces = []
+#     flow_faces = []
+#     for x, y, w, h in faces_rois:
+#         rgb_face = frame[y:y + h, x:x + w, :]
+#         rgb_faces.append(rgb_face)
+#         if flow is not None:
+#             flow_face = flow[y:y + h, x:x + w, :]
+#             flow_faces.append(flow_face)
+#     return rgb_faces, flow_faces
+
+
+# def getFrameSnippet(filepath, num_frames=10):
 #     cap = cv2.VideoCapture(filepath)
-#     frames = []
-#     while cap.isOpened():
-#         ret, frame = cap.read()
-#         if ret:
-#             frames.append(frame)
-#             if cv2.waitKey(1) & 0xFF == ord('q'):
-#                 break
-#         else:
-#             break
+#     frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+#     frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+#     frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+#     start_frame = int(np.random.choice(range(int(frameCount)), size=1))
+#     frames = np.empty((num_frames, frameHeight, frameWidth, 3), dtype=np.uint8)
+#     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+#     j = 0
+#     while j < num_frames:
+#         ret, frames[j] = cap.read()
+#         j += 1
 #     cap.release()
-#     frames = np.array(frames)
 #     return frames
 
 
-def vid2array(filepath):
-    cap = cv2.VideoCapture(filepath)
-    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    buf = np.empty((frameCount, frameHeight, frameWidth, 3), np.dtype('uint8'))
-    fc = 0
-    ret = True
+# def getOpticalFlows(frames):
+#     # TODO: look into cuda optical flows in cv2
+#     flows = np.empty(
+#         (frames.shape[0] - 1, frames.shape[1], frames.shape[2], 2))
+#     prvs = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
+#     for i in range(1, int(frames.shape[0])):
+#         frame = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
+#         flows[i - 1] = cv2.calcOpticalFlowFarneback(
+#             prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+#         prvs = frame
+#     return flows
 
-    while (fc < frameCount and ret):
-        ret, buf[fc] = cap.read()
-        fc += 1
-
-    cap.release()
-    return buf
-
-
-def getMultiFrameFaces(filepath):
-    cap = cv2.VideoCapture(filepath)
-    all_faces = []
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if ret:
-            faces = getFaces(frame)
-            all_faces.extend(faces)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+# %%
+# %%timeit
+for _ in range(10):
+    dp = DataPrep(segment_size=5)
+    datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
+    vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
+    start = time.time()
+    frames = dp.getFrameSnippet(vid)
+    flows = dp.getOpticalFlows(frames)
+    rgb_rois = []
+    flow_rois = []
+    for i in range(int(frames.shape[0])):
+        frame = frames[i]
+        if i > 0:
+            flow = flows[i - 1]
+            rgb_faces, flow_faces = dp.getFaces(frame, flow=flow)
         else:
-            break
-    cap.release()
-    return all_faces
+            rgb_faces, flow_faces = dp.getFaces(frame)
+        rgb_rois.extend(rgb_faces)
+        flow_rois.extend(flow_faces)
+    flow_rois = [r for r in flow_rois if r is not None]
+    print(f"read {dp.segment_size} frames runtime: ", time.time() - start)
+    print(frames.shape, flows.shape, len(rgb_rois), len(flow_rois))
 
-
-def getFaces(frame,
-             grayscale=True,
-             scaleFactor=(1.5, 1.3),
-             minNeighbors=(2, 1)):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    ff_sf, fp_sf = scaleFactor
-    ff_mn, fp_mn = minNeighbors
-    faces = FF.detectMultiScale(
-        image=gray,
-        scaleFactor=ff_sf,
-        minNeighbors=ff_mn)
-    if len(faces) < 1:
-        faces = FP.detectMultiScale(
-            image=gray,
-            scaleFactor=fp_sf,
-            minNeighbors=fp_mn)
-    rois = []
-    for x, y, w, h in faces:
-        face = frame[y:y + h, x:x + w, :]
-        rois.append(face)
-
-    return rois
-# %%
-
-
-# fcPath = '/home/alex/data/opencv/data/haarcascades'
-# frontface = 'haarcascade_frontalface_default.xml'
-# profileface = 'haarcascade_profileface.xml'
-# FF = cv2.CascadeClassifier(os.path.join(fcPath, frontface))
-# FP = cv2.CascadeClassifier(os.path.join(fcPath, profileface))
-datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
-# vid = 'aagfhgtpmv.mp4'
-vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
-start = time.time()
-frames = vid2array(os.path.join(datapath, vid))
-print(time.time() - start)
-print(frames.shape)
-# %%
-start = time.time()
-videodata = skvideo.io.vread(vid)
-print(time.time() - start)
-print(videodata.shape)
 
 # %%
-vid
+fcPath = '/home/alex/data/opencv/data/haarcascades'
+
+frontface = 'haarcascade_frontalface_default.xml'
+profileface = 'haarcascade_profileface.xml'
+FF = cv2.CascadeClassifier(os.path.join(fcPath, frontface))
+FP = cv2.CascadeClassifier(os.path.join(fcPath, profileface))
 # %%
 datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
 vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
+num_frames = 5
 start = time.time()
-frames = vid2array(os.path.join(datapath, vid))
-print("read all frames runtime: ", time.time() - start)
-print(frames.shape)
-
-# start = time.time()
-# print(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-# print(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-# print(cap.get(cv2.CAP_PROP_FPS))
-# print(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-# print(time.time() - start)
-# %%
-% % timeit
-datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
-vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
-start = time.time()
-cap = cv2.VideoCapture(os.path.join(datapath, vid))
-frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-start_frame = int(np.random.choice(range(int(frameCount)), size=1))
-num_frames = 10
-frames = np.empty((num_frames, frameHeight, frameWidth, 3), np.dtype('uint8'))
-i = 0
-j = 0
-while j < num_frames:
-    ret, frame = cap.read()
-    if i != start_frame:
-        i += 1
-        continue
+frames = getFrameSnippet(vid, num_frames=num_frames)
+flows = getOpticalFlows(frames)
+rgb_rois = []
+flow_rois = []
+for i in range(int(frames.shape[0])):
+    frame = frames[i]
+    if i > 0:
+        flow = flows[i - 1]
+        rgb_faces, flow_faces = getFaces(frame, flow=flow)
     else:
-        frames[j] = frame
-        j += 1
-cap.release()
+        rgb_faces, flow_faces = getFaces(frame)
+    rgb_rois.extend(rgb_faces)
+    flow_rois.extend(flow_faces)
 print(f"read {num_frames} frames runtime: ", time.time() - start)
-print(frames.shape)
-
+print(frames.shape, flows.shape, len(rgb_rois), len(flow_rois))
 # %%
-
-
-def getFrameSnippet(filepath, num_frames=10):
-    cap = cv2.VideoCapture(filepath)
-    frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    start_frame = int(np.random.choice(range(int(frameCount)), size=1))
-    frames = np.empty((num_frames, frameHeight, frameWidth, 3))
-    flows = np.empty((num_frames - 1, frameHeight, frameWidth, 2))
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-    j = 0
-    while j < num_frames:
-        ret, frame = cap.read()
-        frames[j] = frame
-        # if j > 0:
-        # flows[i-1] = cv2.calcOpticalFlowFarneback(
-        #     prvs,
-        #     frame,
-        #     flow=None,
-        #     pyr_scale=0.5,
-        #     levels=3,
-        #     winsize=15,
-        #     iterations=3,
-        #     poly_n=5,
-        #     poly_sigma=1.1,
-        #     flags=0)
-        # flows[i - 1] = cv2.calcOpticalFlowFarneback(
-        #     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.1, 0)
-        # prvs = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        j += 1
-    cap.release()
-    return frames, flows
-
+for roi in rgb_rois:
+    print(roi.shape)
+for roi in flow_rois:
+    print(roi.shape)
 # %%
-
-
-# %%
-help(cv2.calcOpticalFlowFarneback)
-
-# %%
-# % % timeit
-datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
-vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
-start = time.time()
-frames, flows = getFrameSnippet(vid)
-print(f"read {num_frames} frames runtime: ", time.time() - start)
-print(frames.shape, flows.shape)
-
-
-# %%
-
 # %%
 datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
 vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
+num_frames = 5
 start = time.time()
-frames = getFrameSnippet(vid, num_frames=5)
+frames = getFrameSnippet(vid, num_frames=num_frames)
 print(f"read {num_frames} frames runtime: ", time.time() - start)
 print(frames.shape)
 start = time.time()
 prvs = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
-flows = np.empty((frames.shape[0], frames.shape[1], frames.shape[2], 2))
+flows = np.empty((frames.shape[0] - 1, frames.shape[1], frames.shape[2], 2))
 for i in range(1, int(frames.shape[0])):
     frame = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
-    flows[i - 1] = cv2.calcOpticalFlowFarneback(
+    flow = cv2.calcOpticalFlowFarneback(
         prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+    print(flow.shape)
 print("flow calculation runtime: ", time.time() - start)
 
 

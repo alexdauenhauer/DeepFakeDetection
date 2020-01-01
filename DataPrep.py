@@ -12,7 +12,6 @@ import pandas as pd
 # %%
 
 
-# TODO: Error handling if there are no faces detected
 class DataPrep():
     def __init__(self, haar_cascades_path=None, segment_size=10):
         if not haar_cascades_path:
@@ -28,7 +27,7 @@ class DataPrep():
         self.fpMinNeighbors = 2
         self.segment_size = segment_size
 
-    def getFaces(self, frame, flow=None, grayscale=True):
+    def getFaces(self, frame, flow=None, grayscale=True, resize=True):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces_rois = self.ff.detectMultiScale(
             image=gray,
@@ -43,23 +42,31 @@ class DataPrep():
             )
         if len(faces_rois) == 0:
             print('no faces found')
-            return [frame], [flow]
+            if resize:
+                return [self.resize(frame)], [self.resize(flow)]
+            else:
+                return [frame], [flow]
         rgb_faces = []
         flow_faces = []
         for x, y, w, h in faces_rois:
             rgb_face = frame[y:y + h, x:x + w, :]
+            if resize:
+                rgb_face = self.resize(rgb_face)
             rgb_faces.append(rgb_face)
             if flow is not None:
                 flow_face = flow[y:y + h, x:x + w, :]
+                if resize:
+                    flow_face = self.resize(flow_face)
                 flow_faces.append(flow_face)
         return rgb_faces, flow_faces
 
-    def getFrameSnippet(self, filepath):
+    def getFrameSnippet(self, filepath, start_frame='random'):
         cap = cv2.VideoCapture(filepath)
         frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        start_frame = int(np.random.choice(range(int(frameCount)), size=1))
+        if start_frame == 'random':
+            start_frame = int(np.random.choice(range(int(frameCount)), size=1))
         frames = np.empty(
             (self.segment_size, frameHeight, frameWidth, 3), dtype=np.uint8)
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -81,6 +88,11 @@ class DataPrep():
                 prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
             prvs = frame
         return flows
+
+    @staticmethod
+    def resize(frame, height=128, width=128):
+        # TODO: will want to test different sizes here as a hyperparameter
+        return cv2.resize(frame, (height, width))
 
     # TODO: make this the full data extraction loop
     def generateData(self):

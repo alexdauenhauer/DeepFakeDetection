@@ -1,20 +1,21 @@
 # To add a new cell, type '# %%'
 # To add a new markdown cell, type '# %% [markdown]'
 # %%
+import json
 import os
 import pickle
 import random
 import time
-import json
 
 import cv2
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import tensorflow as tf
+from sklearn.utils.class_weight import compute_class_weight
 
 from DataPrep import DataPrep
-
 
 # %%
 # for _ in range(10):
@@ -46,11 +47,6 @@ print(frames.shape, flows.shape, len(rgb_rois), len(flow_rois))
 metadata = pd.read_json('data/train_sample_videos/metadata.json').T
 metadata.head()
 
-
-# %%
-from sklearn.utils.class_weight import compute_class_weight
-
-
 # %%
 class_weights = compute_class_weight('balanced', np.unique(
     metadata.label.values), metadata.label.values)
@@ -58,25 +54,56 @@ for k, v in zip(np.unique(metadata.label.values), class_weights):
     print(k, v)
 
 
-# %%
-import tensorflow as tf
 
 
 # %%
-rgb.shape[1:]
 
 
 # %%
-rgb_input = tf.keras.Input(shape=rgb.shape[1:])
-flow_input = tf.keras.Input(shape=flow.shape[1:])
+rgb_input = tf.keras.Input(shape=rgb.shape)
+flow_input = tf.keras.Input(shape=flow.shape)
 
 
 # %%
-x = tf.keras.layers.Convolution2D(
-    filters=rgb.shape[0],
+x = tf.keras.layers.ConvLSTM2D(
+    filters=64,
+    kernel_size=(3,3),
+    strides=(1,1),
+    padding='same',
+    return_sequences=False,
+    dropout=0.5
+)(rgb_input)
+x.shape
 
-)
 
+# %%
+inputs = tf.keras.Input(shape=rgb.shape, name='inputs')
+x = tf.keras.layers.Conv3D(
+    filters=32,
+    kernel_size=(3,3,3),
+    padding='same',
+    data_format='channels_last',
+    activation='relu')(inputs)
+x.shape
+x = tf.keras.layers.Conv3D(64, 3, activation='relu')(x)
+block_1_output = tf.keras.layers.MaxPooling2D(3)(x)
+
+x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(block_1_output)
+x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
+block_2_output = tf.keras.layers.add([x, block_1_output])
+
+x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(block_2_output)
+x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
+block_3_output = tf.keras.layers.add([x, block_2_output])
+
+x = tf.keras.layers.Conv3D(64, 3, activation='relu')(block_3_output)
+x = tf.keras.layers.GlobalAveragePooling2D()(x)
+x = tf.keras.layers.Dense(256, activation='relu')(x)
+x = tf.keras.layers.Dropout(0.5)(x)
+outputs = tf.keras.layers.Dense(10, activation='softmax')(x)
+
+model = tf.keras.Model(inputs, outputs, name='toy_resnet')
+model.summary()
 
 # %%
 counter = 0

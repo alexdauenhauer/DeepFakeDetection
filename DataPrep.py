@@ -1,7 +1,8 @@
 # %%
-import os
+from os import path, listdir
 import pickle
-import random
+from random import choice
+from time import time
 
 import cv2
 import matplotlib.patches as patches
@@ -13,14 +14,20 @@ import pandas as pd
 
 
 class DataPrep():
-    def __init__(self, haar_cascades_path=None, segment_size=10):
+    def __init__(self,
+                 haar_cascades_path=None,
+                 datapath=None,
+                 segment_size=10):
         if not haar_cascades_path:
-            haar_cascades_path = '/home/alex/data/opencv/data/haarcascades'
+            # TODO: move this folder to repo for relative path usage
+            haar_cascades_path = '/home/alex/projects/PublicRepos/opencv/data/haarcascades'
+        if not datapath:
+            self.datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
         fcPath = haar_cascades_path
         frontface = 'haarcascade_frontalface_default.xml'
         profileface = 'haarcascade_profileface.xml'
-        self.ff = cv2.CascadeClassifier(os.path.join(fcPath, frontface))
-        self.fp = cv2.CascadeClassifier(os.path.join(fcPath, profileface))
+        self.ff = cv2.CascadeClassifier(path.join(fcPath, frontface))
+        self.fp = cv2.CascadeClassifier(path.join(fcPath, profileface))
         self.ffScaleFactor = 1.5
         self.fpScaleFactor = 1.5
         self.ffMinNeigbors = 2
@@ -42,6 +49,10 @@ class DataPrep():
             )
         if len(faces_rois) == 0:
             print('no faces found')
+            # if resize:
+            #     frame = cv2.resize(frame, (128, 128))
+            #     flow = cv2.resize(flow, (128, 128))
+            # return [frame], [flow]
             if resize:
                 return [self.resize(frame)], [self.resize(flow)]
             else:
@@ -52,21 +63,23 @@ class DataPrep():
             rgb_face = frame[y:y + h, x:x + w, :]
             if resize:
                 rgb_face = self.resize(rgb_face)
+                # rgb_face = cv2.resize(rgb_face, (128, 128))
             rgb_faces.append(rgb_face)
             if flow is not None:
                 flow_face = flow[y:y + h, x:x + w, :]
                 if resize:
                     flow_face = self.resize(flow_face)
+                    # flow_face = cv2.resize(flow_face, (128, 128))
                 flow_faces.append(flow_face)
         return rgb_faces, flow_faces
 
-    def getFrameSnippet(self, filepath, start_frame='random'):
+    def getFrameSnippet(self, filepath, start_frame=None):
         cap = cv2.VideoCapture(filepath)
         frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if start_frame == 'random':
-            start_frame = int(np.random.choice(range(int(frameCount)), size=1))
+        if not start_frame:
+            start_frame = choice(range(int(frameCount)))
         frames = np.empty(
             (self.segment_size, frameHeight, frameWidth, 3), dtype=np.uint8)
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -97,3 +110,31 @@ class DataPrep():
     # TODO: make this the full data extraction loop
     def generateData(self):
         raise NotImplementedError
+
+    def getRandomVid(self, frame_name=None, start_frame=None):
+        if not frame_name:
+            frame_name = choice(listdir(self.datapath))
+        vid = path.join(self.datapath, frame_name)
+        print(vid)
+        start = time()
+        frames = self.getFrameSnippet(vid, start_frame=start_frame)
+        flows = self.getOpticalFlows(frames)
+        rgb_rois = []
+        flow_rois = []
+        for i in range(int(frames.shape[0])):
+            frame = frames[i]
+            if i > 0:
+                flow = flows[i - 1]
+                rgb_faces, flow_faces = self.getFaces(frame, flow=flow)
+            else:
+                rgb_faces, flow_faces = self.getFaces(frame)
+            rgb_rois.extend(rgb_faces)
+            flow_rois.extend(flow_faces)
+        flow_rois = [r for r in flow_rois if r is not None]
+        self.rgb = np.stack(rgb_rois)
+        self.flow = np.stack(flow_rois)
+        # print(f"read {self.segment_size} frames runtime: ", time() - start)
+        # print(frames.shape, flows.shape, len(rgb_rois), len(flow_rois))
+        return self.rgb, self.flow
+
+

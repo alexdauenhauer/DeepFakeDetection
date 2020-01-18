@@ -1,0 +1,19 @@
+Problem:
+LSTM or 3D ConvNet will not work if the frames have multiple faces stacked on top of each other or if a non-face is detected as a face and stacked in with the faces. The pattern determined will not make sense because frames of different faces will be in sequence with each other.
+
+Solution:
+only a single face can be kept for the model
+
+Ideas for fixing model
+- keep only the largest face
+    - need to run experiments to see if this will result in incorrect objects being matched with faces
+    - will result in only one face being kept in each frame
+- identify the size of a face (maybe the largest) keep only objects in future frames that match this size (within some tolerance)
+- Use the entire frame (should run a baseline on this)
+- should experiment with dlib, see if it performs better
+
+If can reliably only grab faces, then multiple faces may be able to be kept with padded_batch
+
+Tasks for this weekend
+- get a baseline model trained on full frames
+- test out dlib

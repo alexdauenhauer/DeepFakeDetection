@@ -17,12 +17,18 @@ class DataPrep():
     def __init__(self,
                  haar_cascades_path=None,
                  datapath=None,
+                 labelpath=None,
                  segment_size=10):
         if not haar_cascades_path:
             # TODO: move this folder to repo for relative path usage
             haar_cascades_path = '/home/alex/projects/PublicRepos/opencv/data/haarcascades'
         if not datapath:
-            self.datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
+            self.datapath = 'data/train_sample_videos'
+        if not labelpath:
+            self.labelpath = 'data/train_sample_videos/metadata.json'
+        # self.labels = pd.read_json(self.labelpath)
+        # if self.labels.shape[1] > self.labels.shape[0]:
+        #     self.labels = self.labels.T
         fcPath = haar_cascades_path
         frontface = 'haarcascade_frontalface_default.xml'
         profileface = 'haarcascade_profileface.xml'
@@ -33,6 +39,11 @@ class DataPrep():
         self.ffMinNeigbors = 2
         self.fpMinNeighbors = 2
         self.segment_size = segment_size
+        self.frames = None
+        self.flows = None
+
+    def generateFileList(self):
+        raise NotImplementedError
 
     def getFaces(self, frame, flow=None, grayscale=True, resize=True):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -80,30 +91,35 @@ class DataPrep():
         frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         if not start_frame:
             start_frame = choice(range(int(frameCount)))
-        frames = np.empty(
+        self.frames = np.empty(
             (self.segment_size, frameHeight, frameWidth, 3), dtype=np.uint8)
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
         j = 0
         while j < self.segment_size:
-            ret, frames[j] = cap.read()
+            ret, self.frames[j] = cap.read()
             j += 1
         cap.release()
-        return frames
+        return self.frames
+
+    def getOpticalFlows(self):
+        if self.frames is not None:
+            self.flows = np.empty(
+                (self.frames.shape[0] - 1,
+                 self.frames.shape[1],
+                 self.frames.shape[2],
+                 2))
+            prvs = cv2.cvtColor(
+                self.frames[0].astype(np.uint8), cv2.COLOR_BGR2GRAY)
+            for i in range(1, int(self.frames.shape[0])):
+                frame = cv2.cvtColor(
+                    self.frames[i].astype(np.uint8), cv2.COLOR_BGR2GRAY)
+                self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
+                    prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                prvs = frame
+        return self.flows
 
     @staticmethod
-    def getOpticalFlows(frames):
-        flows = np.empty(
-            (frames.shape[0] - 1, frames.shape[1], frames.shape[2], 2))
-        prvs = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
-        for i in range(1, int(frames.shape[0])):
-            frame = cv2.cvtColor(frames[i], cv2.COLOR_BGR2GRAY)
-            flows[i - 1] = cv2.calcOpticalFlowFarneback(
-                prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-            prvs = frame
-        return flows
-
-    @staticmethod
-    def resize(frame, height=128, width=128):
+    def resize(frame, height=256, width=256):
         # TODO: will want to test different sizes here as a hyperparameter
         return cv2.resize(frame, (height, width))
 
@@ -111,30 +127,70 @@ class DataPrep():
     def generateData(self):
         raise NotImplementedError
 
-    def getRandomVid(self, frame_name=None, start_frame=None):
+    def prepVid(
+            self,
+            frame_name=None,
+            start_frame=None,
+            face_only=False,
+            rsz=(256, 256)):
         if not frame_name:
             frame_name = choice(listdir(self.datapath))
         vid = path.join(self.datapath, frame_name)
-        print(vid)
+        # print(vid)
         start = time()
         frames = self.getFrameSnippet(vid, start_frame=start_frame)
         flows = self.getOpticalFlows(frames)
         rgb_rois = []
         flow_rois = []
-        for i in range(int(frames.shape[0])):
-            frame = frames[i]
-            if i > 0:
-                flow = flows[i - 1]
-                rgb_faces, flow_faces = self.getFaces(frame, flow=flow)
-            else:
-                rgb_faces, flow_faces = self.getFaces(frame)
-            rgb_rois.extend(rgb_faces)
-            flow_rois.extend(flow_faces)
-        flow_rois = [r for r in flow_rois if r is not None]
-        self.rgb = np.stack(rgb_rois)
-        self.flow = np.stack(flow_rois)
-        # print(f"read {self.segment_size} frames runtime: ", time() - start)
-        # print(frames.shape, flows.shape, len(rgb_rois), len(flow_rois))
+        if face_only:
+            for i in range(int(frames.shape[0])):
+                frame = frames[i]
+                if i > 0:
+                    flow = flows[i - 1]
+                    rgb_faces, flow_faces = self.getFaces(frame, flow=flow)
+                else:
+                    rgb_faces, flow_faces = self.getFaces(frame)
+                rgb_rois.extend(rgb_faces)
+                flow_rois.extend(flow_faces)
+            flow_rois = [r for r in flow_rois if r is not None]
+            self.rgb = np.stack(rgb_rois)
+            self.flow = np.stack(flow_rois)
+        else:
+            rgb_rois = np.empty((frames.shape[0], rsz[0], rsz[1], 3))
+            flow_rois = np.empty((flows.shape[0], rsz[0], rsz[1], 2))
+            for i, frame in enumerate(frames):
+                rgb_rois[i] = self.resize(frame, *rsz)
+            for i, flow in enumerate(flows):
+                flow_rois[i] = self.resize(flow, *rsz)
+            self.rgb = rgb_rois
+            self.flow = flow_rois
         return self.rgb, self.flow
 
+    def prepFullFrames(self, filepath=None, start_frame=None, rsz=(256, 256)):
+        self.filepath = filepath
+        if not filepath:
+            self.filepath = path.join(
+                self.datapath, choice(listdir(self.datapath)))
+        self.getFrameSnippet(filepath=self.filepath, start_frame=start_frame)
+        frames = np.empty((self.frames.shape[0], rsz[0], rsz[1], 3))
+        for i, frame in enumerate(self.frames):
+            frames[i] = self.resize(frame, *rsz)
+        self.frames = frames
+        return self.frames
 
+    def prepOpticalFlows(
+        self,
+        filepath=None,
+        start_frame=None,
+        rsz=(
+            256,
+            256)):
+        if not self.frames:
+            if not filepath:
+                filepath = path.join(
+                    self.datapath, choice(listdir(self.datapath)))
+            self.getFrameSnippet(filepath=filepath, start_frame=start_frame)
+        frames = np.empty((self.frames.shape[0], rsz[0], rsz[1], 3))
+        for i, frame in enumerate(self.frames):
+            frames[i] = self.resize(frame, *rsz)
+        self.frames = frames

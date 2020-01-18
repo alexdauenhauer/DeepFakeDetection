@@ -7,45 +7,32 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from sklearn.utils.class_weight import compute_class_weight
+from tensorflow.keras.layers import (BatchNormalization, ConvLSTM2D, Dense,
+                                     LeakyReLU, Input)
+from tensorflow.keras.models import Model
+from tensorflow.keras.utils import to_categorical
 
 from DataPrep import DataPrep
 
 # %%
 dp = DataPrep(segment_size=5)
-datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
-# vid = os.path.join(datapath, random.choice(os.listdir(datapath)))
-frame_name = random.choice(os.listdir(datapath))
-vid = os.path.join(datapath, frame_name)
 start = time.time()
-frames = dp.getFrameSnippet(vid, start_frame=0)
-flows = dp.getOpticalFlows(frames)
-rgb_rois = []
-flow_rois = []
-for i in range(int(frames.shape[0])):
-    frame = frames[i]
-    if i > 0:
-        flow = flows[i - 1]
-        rgb_faces, flow_faces = dp.getFaces(frame, flow=flow)
-    else:
-        rgb_faces, flow_faces = dp.getFaces(frame)
-    rgb_rois.extend(rgb_faces)
-    flow_rois.extend(flow_faces)
-flow_rois = [r for r in flow_rois if r is not None]
-rgb = np.stack(rgb_rois)
-flow = np.stack(flow_rois)
-print(f"read {dp.segment_size} frames runtime: ", time.time() - start)
-print(frames.shape, flows.shape, len(rgb_rois), len(flow_rois))
-
-# %%
-dp = DataPrep(segment_size=5)
-rgb, flow = dp.getRandomVid(frame_name=frame_name, start_frame=0)
-# %%
-rgb.shape, flow.shape
-# %%
+dp.prepFullFrames()
+dp.getOpticalFlows()
+print(time.time() - start)
+print(dp.filepath)
+print(dp.frames.shape, dp.flows.shape, dp.labels.shape)
 
 # %%
 metadata = pd.read_json('data/train_sample_videos/metadata.json').T
+metadata.shape
+# %%
 metadata.head()
+
+# %%
+vid = random.choice(os.listdir(dp.datapath))
+metadata.at[vid, 'label']
+# %%
 
 # %%
 class_weights = compute_class_weight('balanced', np.unique(
@@ -53,65 +40,145 @@ class_weights = compute_class_weight('balanced', np.unique(
 for k, v in zip(np.unique(metadata.label.values), class_weights):
     print(k, v)
 # %%
-def count(stop):
-  i = 0
-  while i<stop:
-    yield i
-    i += 1
 
-ds_counter = tf.data.Dataset.from_generator(count, args=[25], output_types=tf.int32, output_shapes = (), )
+
+def count(stop):
+    i = 0
+    while i < stop:
+        yield i
+        i += 1
+
+
+ds_counter = tf.data.Dataset.from_generator(
+    count, args=[25], output_types=tf.int32, output_shapes=(), )
 
 for count_batch in ds_counter.repeat().batch(10).take(10):
-  print(count_batch.numpy())
+    print(count_batch.numpy())
 
 # %%
-def generateVids(datapath=None, stop=5):
+
+
+def generateFrames(datapath=None):
     if not datapath:
         datapath = '/home/alex/projects/DeepFakeDetection/data/train_sample_videos'
-    while i < stop:
+    vids = [os.path.join(datapath, v) for v in os.listdir(datapath)]
+    for v in vids:
         dp = DataPrep(segment_size=5)
-        yield dp.getRandomVid()
+        yield dp.prepVid(frame_name=v)
 
-start = time.time()
+
 vids = tf.data.Dataset.from_generator(
     generateVids,
-    # args=[None, 20]
     output_types=(tf.int32, tf.int32),
-    output_shapes=((None,128,128,3), (None,128,128,2))
-    )
-print(time.time() - start)
+    output_shapes=((5, 256, 256, 3), (4, 256, 256, 2))
+)
 
 # %%
-for x in vids.batch(1).take(20):
+start = time.time()
+for x in vids.batch(2).take(5):
     print(x[0].numpy().shape, x[1].numpy().shape)
+    print(time.time() - start)
+
+
+# %%
+vids.shape
+# %%
+
+# %%
+
+# %%
+filepath = 'data/train_sample_videos'
+
+
+def input_fn(filepath, segment_size=5):
+    if 'metadata.json' in os.listdir(filepath):
+        datapath = os.path.join(filepath, 'metadata.json')
+        data = pd.read_json(os.path.join(datapath)).T
+        files = [os.path.join(filepath, f) for f in os.listdir(filepath)
+                 if 'metadata.json' not in f]
+    data['categorical'] = data.label.apply(lambda x: 0 if x == 'REAL' else 1)
+    labels = to_categorical(data.categorical, num_classes=2)
+    # for f, l in zip(files, labels):
+    #     dp = DataPrep(segment_size=5)
+    #     frames = dp.prepFullFrames()
+    #     flows = dp.getOpticalFlows()
+    #     filename = dp.filepath.split('/')[-1]
+    #     print("red_input", frames[:, :, :, 0])
+    #     print("green_input", frames[:, :, :, 1])
+    #     print("blue_input", frames[:, :, :, 2])
+    #     print("x_flow_input", flows[:, :, :, 0])
+    #     print("y_flow_input", flows[:, :, :, 1],)
+    #     print(l)
+
+    def dataGenerator():
+        for f, l in zip(files, labels):
+            dp = DataPrep(segment_size=segment_size)
+            frames = dp.prepFullFrames()
+            flows = dp.getOpticalFlows()
+            filename = dp.filepath.split('/')[-1]
+            yield {
+                "red_input": frames[:, :, :, 0],
+                "green_input": frames[:, :, :, 1],
+                "blue_input": frames[:, :, :, 2],
+                "x_flow_input": flows[:, :, :, 0],
+                "y_flow_input": flows[:, :, :, 1],
+            }, l
+    dataset = tf.data.Dataset.from_generator(
+        dataGenerator,
+        output_types=(
+            {
+                "red_input": tf.int8,
+                "green_input": tf.int8,
+                "blue_input": tf.int8,
+                "x_flow_input": tf.float32,
+                "y_flow_input": tf.float32,
+            },
+            tf.int8)
+    )
+    dataset = dataset.batch(1)
+    return dataset
+
+
+dataset = input_fn(filepath)
+start = time.time()
+for x in dataset.take(5):
+    data_dict, label = x
+    print(label.numpy())
+    for k, v in data_dict.items():
+        print(k, v.numpy().shape)
+    print(time.time() - start)
 
 
 # %%
 
 # %%
 
-# %%
-rgb_input = tf.keras.Input(shape=rgb.shape)
-flow_input = tf.keras.Input(shape=flow.shape)
-print(rgb_input.shape, flow.shape)
 
 # %%
-x = tf.keras.layers.ConvLSTM2D(
-    filters=64,
-    kernel_size=(3,3),
-    strides=(1,1),
+rgb_input = tf.keras.Input(shape=(5, 256, 256, 3), name='rgb_input')
+flow_input = tf.keras.Input(shape=(4, 256, 256, 3), name='flow_input')
+x = ConvLSTM2D(
+    filters=4,
+    kernel_size=(3, 3),
+    strides=(1, 1),
     padding='same',
     return_sequences=False,
     dropout=0.5
 )(rgb_input)
-x.shape
+x = LeakyReLU()(x)
+x = BatchNormalization()(x)
+rgb_outputs = Dense(1, activation='sigmoid', name='rgb_outputs')
+flow_outputs = Dense(1, activation='sigmoid', name='flow_outputs')
+
+
+# %%
 
 
 # %%
 inputs = tf.keras.Input(shape=rgb.shape, name='inputs')
 x = tf.keras.layers.Conv3D(
     filters=32,
-    kernel_size=(3,3,3),
+    kernel_size=(3, 3, 3),
     padding='same',
     data_format='channels_last',
     activation='relu')(inputs)
@@ -119,11 +186,13 @@ x.shape
 x = tf.keras.layers.Conv3D(64, 3, activation='relu')(x)
 block_1_output = tf.keras.layers.MaxPooling2D(3)(x)
 
-x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(block_1_output)
+x = tf.keras.layers.Conv3D(64, 3, activation='relu',
+                           padding='same')(block_1_output)
 x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
 block_2_output = tf.keras.layers.add([x, block_1_output])
 
-x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(block_2_output)
+x = tf.keras.layers.Conv3D(64, 3, activation='relu',
+                           padding='same')(block_2_output)
 x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
 block_3_output = tf.keras.layers.add([x, block_2_output])
 

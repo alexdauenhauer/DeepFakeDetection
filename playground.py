@@ -98,17 +98,6 @@ def input_fn(filepath, segment_size=5):
                  if 'metadata.json' not in f]
     data['categorical'] = data.label.apply(lambda x: 0 if x == 'REAL' else 1)
     labels = to_categorical(data.categorical, num_classes=2)
-    # for f, l in zip(files, labels):
-    #     dp = DataPrep(segment_size=5)
-    #     frames = dp.prepFullFrames()
-    #     flows = dp.getOpticalFlows()
-    #     filename = dp.filepath.split('/')[-1]
-    #     print("red_input", frames[:, :, :, 0])
-    #     print("green_input", frames[:, :, :, 1])
-    #     print("blue_input", frames[:, :, :, 2])
-    #     print("x_flow_input", flows[:, :, :, 0])
-    #     print("y_flow_input", flows[:, :, :, 1],)
-    #     print(l)
 
     def dataGenerator():
         for f, l in zip(files, labels):
@@ -116,29 +105,51 @@ def input_fn(filepath, segment_size=5):
             frames = dp.prepFullFrames()
             flows = dp.getOpticalFlows()
             filename = dp.filepath.split('/')[-1]
-            yield {
-                "red_input": frames[:, :, :, 0],
-                "green_input": frames[:, :, :, 1],
-                "blue_input": frames[:, :, :, 2],
-                "x_flow_input": flows[:, :, :, 0],
-                "y_flow_input": flows[:, :, :, 1],
-            }, l
+            # yield {
+            #     "red_input": frames[:, :, :, 0],
+            #     "green_input": frames[:, :, :, 1],
+            #     "blue_input": frames[:, :, :, 2],
+            #     "x_flow_input": flows[:, :, :, 0],
+            #     "y_flow_input": flows[:, :, :, 1],
+            # }, l
+            yield {"rgb_input": frames, "flow_input": flows}, l
+    # dataset = tf.data.Dataset.from_generator(
+    #     dataGenerator,
+    #     output_types=(
+    #         {
+    #             "red_input": tf.int8,
+    #             "green_input": tf.int8,
+    #             "blue_input": tf.int8,
+    #             "x_flow_input": tf.float32,
+    #             "y_flow_input": tf.float32,
+    #         },
+    #         tf.int8),
+    #     output_shapes=(
+    #         {
+    #             "red_input": (segment_size, 256, 256),
+    #             "green_input": (segment_size, 256, 256),
+    #             "blue_input": (segment_size, 256, 256),
+    #             "x_flow_input": (segment_size - 1, 256, 256),
+    #             "y_flow_input": (segment_size - 1, 256, 256),
+    #         },
+    #         (2,))
+    # )
     dataset = tf.data.Dataset.from_generator(
         dataGenerator,
         output_types=(
+            {"rgb_input": tf.int8, "flow_input": tf.float32}, tf.int8),
+        output_shapes=(
             {
-                "red_input": tf.int8,
-                "green_input": tf.int8,
-                "blue_input": tf.int8,
-                "x_flow_input": tf.float32,
-                "y_flow_input": tf.float32,
+                "rgb_input": (segment_size, 256, 256, 3),
+                "flow_input": (segment_size - 1, 256, 256, 2)
             },
-            tf.int8)
+            (2,))
     )
     dataset = dataset.batch(1)
     return dataset
 
 
+# %%
 dataset = input_fn(filepath)
 start = time.time()
 for x in dataset.take(5):
@@ -152,55 +163,190 @@ for x in dataset.take(5):
 # %%
 
 # %%
+dataset = input_fn(filepath)
+for x in dataset.take(1):
+    data_dict, label = x
+    print(label.numpy())
+    rgb = data_dict.get('rgb_input')
+    print(rgb.numpy().shape)
 
 
 # %%
+print(rgb.numpy().shape)
+# %%
+type(rgb)
+# %%
+
+# %%
+# red_input = tf.keras.Input(shape=(5, 256, 256), name='red_input')
+# green_input = tf.keras.Input(shape=(5, 256, 256), name='green_input')
+# blue_input = tf.keras.Input(shape=(5, 256, 256), name='blue_input')
 rgb_input = tf.keras.Input(shape=(5, 256, 256, 3), name='rgb_input')
-flow_input = tf.keras.Input(shape=(4, 256, 256, 3), name='flow_input')
+inputs = rgb_input(rgb)
+inputs.shape
+# RGB model
+# r = ConvLSTM2D(
+#     filters=8,
+#     kernel_size=(3, 3),
+#     strides=(1, 1),
+#     padding='same',
+#     return_sequences=False,
+#     dropout=0.5
+
+
+# )(red_input)
+# r = LeakyReLU()(r)
+# r = BatchNormalization()(r)
+# # red_output = Dense(2, activation='softmax', name='red_output')(r)
+# red_output = Dense(2, name='red_output')(r)
+
+# g = ConvLSTM2D(
+#     filters=8,
+#     kernel_size=(3, 3),
+#     strides=(1, 1),
+#     padding='same',
+#     return_sequences=False,
+#     dropout=0.5
+# )(green_input)
+# g = LeakyReLU()(g)
+# g = BatchNormalization()(g)
+# # green_output = Dense(2, activation='softmax', name='green_output')(g)
+# green_output = Dense(2, name='green_output')(g)
+
 x = ConvLSTM2D(
-    filters=4,
+    filters=8,
     kernel_size=(3, 3),
     strides=(1, 1),
     padding='same',
+    data_format='channels_last',
     return_sequences=False,
     dropout=0.5
 )(rgb_input)
 x = LeakyReLU()(x)
 x = BatchNormalization()(x)
-rgb_outputs = Dense(1, activation='sigmoid', name='rgb_outputs')
-flow_outputs = Dense(1, activation='sigmoid', name='flow_outputs')
+# blue_output = Dense(2, activation='softmax', name='blue_output')(b)
+rgb_output = Dense(2, name='blue_output')(x)
 
+# rgb_output = tf.keras.layers.average([red_output, green_output, blue_output])
+rgb_model = Model(inputs=rgb_input, outputs=rgb_output)
+# %%
+rgb_model.summary()
 
 # %%
-
+tf.keras.utils.plot_model(
+    rgb_model,
+    to_file='rgb_model.png',
+    show_shapes=True,
+    show_layer_names=True,
+)
 
 # %%
-inputs = tf.keras.Input(shape=rgb.shape, name='inputs')
-x = tf.keras.layers.Conv3D(
-    filters=32,
-    kernel_size=(3, 3, 3),
+# x_flow_input = tf.keras.Input(shape=(4, 256, 256), name='x_flow_input')
+# y_flow_input = tf.keras.Input(shape=(4, 256, 256), name='y_flow_input')
+flow_input = tf.keras.Input(shape=(4, 256, 256, 2), name='flow_input')
+
+x = ConvLSTM2D(
+    filters=8,
+    kernel_size=(3, 3),
+    strides=(1, 1),
     padding='same',
     data_format='channels_last',
-    activation='relu')(inputs)
-x.shape
-x = tf.keras.layers.Conv3D(64, 3, activation='relu')(x)
-block_1_output = tf.keras.layers.MaxPooling2D(3)(x)
+    return_sequences=False,
+    dropout=0.5
+)(flow_input)
+x = LeakyReLU()(x)
+x = BatchNormalization()(x)
+# flow_output = Dense(2, activation='softmax', name='flow_output')(x)
+flow_output = Dense(2, name='flow_output')(x)
 
-x = tf.keras.layers.Conv3D(64, 3, activation='relu',
-                           padding='same')(block_1_output)
-x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
-block_2_output = tf.keras.layers.add([x, block_1_output])
+# y = ConvLSTM2D(
+#     filters=8,
+#     kernel_size=(3, 3),
+#     strides=(1, 1),
+#     padding='same',
+#     return_sequences=False,
+#     dropout=0.5
+# )(y_flow_input)
+# y = LeakyReLU()(y)
+# y = BatchNormalization()(y)
+# # y_flow_output = Dense(2, activation='softmax', name='y_flow_output')(y)
+# y_flow_output = Dense(2, name='y_flow_output')(y)
 
-x = tf.keras.layers.Conv3D(64, 3, activation='relu',
-                           padding='same')(block_2_output)
-x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
-block_3_output = tf.keras.layers.add([x, block_2_output])
+# flow_output = tf.keras.layers.average([x_flow_output, y_flow_output])
+flow_model = Model(inputs=flow_input, outputs=flow_output)
+# %%
+flow_model.summary()
 
-x = tf.keras.layers.Conv3D(64, 3, activation='relu')(block_3_output)
-x = tf.keras.layers.GlobalAveragePooling2D()(x)
-x = tf.keras.layers.Dense(256, activation='relu')(x)
-x = tf.keras.layers.Dropout(0.5)(x)
-outputs = tf.keras.layers.Dense(10, activation='softmax')(x)
+# %%
+tf.keras.utils.plot_model(
+    flow_model,
+    to_file='flow_model.png',
+    show_shapes=True,
+    show_layer_names=True,
+)
 
-model = tf.keras.Model(inputs, outputs, name='toy_resnet')
+# %%
+final_average = tf.keras.layers.average([rgb_output, flow_output])
+final_output = tf.keras.activations.softmax(final_average)
+model = Model(
+    inputs={
+        "rgb_input": rgb_input,
+        "flow_input": flow_input,
+    },
+    outputs=final_output
+)
 model.summary()
+tf.keras.utils.plot_model(
+    model,
+    to_file='model.png',
+    show_shapes=True,
+    show_layer_names=True,
+)
+# %%
+opt = tf.keras.optimizers.Adam()
+model.compile(
+    optimizer=opt,
+    loss='categorical_crossentropy',
+    metrics=['acc'])
+filepath = 'data/train_sample_videos'
+model.fit(
+    input_fn(filepath),
+    epochs=2,
+    verbose=1,
+    class_weight=class_weights)
+
+# %%
+model.layers
+# %%
+for layer in model.layers:
+    print(layer.shape)
+# %%
+# inputs = tf.keras.Input(shape=rgb.shape, name='inputs')
+# x = tf.keras.layers.Conv3D(
+#     filters=32,
+#     kernel_size=(3, 3, 3),
+#     padding='same',
+#     data_format='channels_last',
+#     activation='relu')(inputs)
+# x.shape
+# x = tf.keras.layers.Conv3D(64, 3, activation='relu')(x)
+# block_1_output = tf.keras.layers.MaxPooling2D(3)(x)
+
+# x = tf.keras.layers.Conv3D(64, 3, activation='relu',
+#                            padding='same')(block_1_output)
+# x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
+# block_2_output = tf.keras.layers.add([x, block_1_output])
+
+# x = tf.keras.layers.Conv3D(64, 3, activation='relu',
+#                            padding='same')(block_2_output)
+# x = tf.keras.layers.Conv3D(64, 3, activation='relu', padding='same')(x)
+# block_3_output = tf.keras.layers.add([x, block_2_output])
+
+# x = tf.keras.layers.Conv3D(64, 3, activation='relu')(block_3_output)
+# x = tf.keras.layers.GlobalAveragePooling2D()(x)
+# x = tf.keras.layers.Dense(256, activation='relu')(x)
+# x = tf.keras.layers.Dropout(0.5)(x)
+# outputs = tf.keras.layers.Dense(20, activation='softmaxx')(x)
+
+# model = tf.keras.Model(inputs, outputs, name='toy_resnet')
+# model.summary()

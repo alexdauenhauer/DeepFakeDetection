@@ -161,7 +161,34 @@ for x in dataset.take(5):
 
 
 # %%
+filepath = 'data/train_sample_videos'
+segment_size = 5
+datapath = os.path.join(filepath, 'metadata.json')
+data = pd.read_json(os.path.join(datapath)).T
+files = [os.path.join(filepath, f) for f in os.listdir(filepath)
+         if 'metadata.json' not in f]
 
+
+def f(x): return 0 if x == 'REAL' else 1
+
+
+labels = [f(data.at[x.split('/')[-1], 'label']) for x in files]
+labels = to_categorical(labels, num_classes=2)
+files = files[:5]
+labels = labels[:5]
+rgb = []
+flow = []
+for f in files:
+    dp = DataPrep(segment_size=segment_size)
+    frames = dp.prepFullFrames()
+    flows = dp.getOpticalFlows()
+    rgb.append(frames)
+    flow.append(flows)
+rgb = np.stack(rgb, axis=0)
+flow = np.stack(flow, axis=0)
+print(rgb.shape, flow.shape, labels.shape)
+# %%
+# np.stack(rgb_input, axis=0).shape
 # %%
 dataset = input_fn(filepath)
 for x in dataset.take(1):
@@ -182,8 +209,6 @@ type(rgb)
 # green_input = tf.keras.Input(shape=(5, 256, 256), name='green_input')
 # blue_input = tf.keras.Input(shape=(5, 256, 256), name='blue_input')
 rgb_input = tf.keras.Input(shape=(5, 256, 256, 3), name='rgb_input')
-inputs = rgb_input(rgb)
-inputs.shape
 # RGB model
 # r = ConvLSTM2D(
 #     filters=8,
@@ -287,7 +312,8 @@ tf.keras.utils.plot_model(
 
 # %%
 final_average = tf.keras.layers.average([rgb_output, flow_output])
-final_output = tf.keras.activations.softmax(final_average)
+x = tf.keras.layers.Flatten()(final_average)
+final_output = Dense(2, activation='softmax', name='final_output')(x)
 model = Model(
     inputs={
         "rgb_input": rgb_input,
@@ -295,7 +321,7 @@ model = Model(
     },
     outputs=final_output
 )
-model.summary()
+# model.summary()
 tf.keras.utils.plot_model(
     model,
     to_file='model.png',
@@ -308,12 +334,14 @@ model.compile(
     optimizer=opt,
     loss='categorical_crossentropy',
     metrics=['acc'])
-filepath = 'data/train_sample_videos'
+# filepath = 'data/train_sample_videos'
 model.fit(
-    input_fn(filepath),
+    x={'rgb_input': rgb, 'flow_input': flow},
+    y=labels,
     epochs=2,
     verbose=1,
-    class_weight=class_weights)
+    # class_weight=class_weights
+)
 
 # %%
 model.layers

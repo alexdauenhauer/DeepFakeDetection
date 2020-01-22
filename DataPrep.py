@@ -5,8 +5,8 @@ from random import choice
 from time import time
 
 import cv2
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
+# import matplotlib.patches as patches
+# import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 

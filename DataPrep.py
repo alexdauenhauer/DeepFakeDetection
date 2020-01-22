@@ -91,6 +91,8 @@ class DataPrep():
         frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         if not start_frame:
             start_frame = choice(range(int(frameCount)))
+        if frameCount - start_frame < self.segment_size:
+            start_frame = 0
         self.frames = np.empty(
             (self.segment_size, frameHeight, frameWidth, 3), dtype=np.uint8)
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -178,14 +180,12 @@ class DataPrep():
         self.frames = frames
         return self.frames
 
-    def prepOpticalFlows(
-        self,
-        filepath=None,
-        start_frame=None,
-        rsz=(
-            256,
-            256)):
-        if not self.frames:
+    # TODO: review this function
+    def prepOpticalFlows(self,
+                         filepath=None,
+                         start_frame=None,
+                         rsz=(256, 256)):
+        if self.frames is None:
             if not filepath:
                 filepath = path.join(
                     self.datapath, choice(listdir(self.datapath)))

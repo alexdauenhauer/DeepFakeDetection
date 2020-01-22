@@ -161,36 +161,47 @@ for x in dataset.take(5):
 
 
 # %%
-filepath = 'data/train_sample_videos'
-segment_size = 5
-datapath = os.path.join(filepath, 'metadata.json')
-data = pd.read_json(os.path.join(datapath)).T
-files = [os.path.join(filepath, f) for f in os.listdir(filepath)
-         if 'metadata.json' not in f]
-
-
-def f(x): return 0 if x == 'REAL' else 1
-
-
-labels = [f(data.at[x.split('/')[-1], 'label']) for x in files]
-labels = to_categorical(labels, num_classes=2)
-files = files[:5]
-labels = labels[:5]
-rgb = []
-flow = []
-for f in files:
-    dp = DataPrep(segment_size=segment_size)
-    frames = dp.prepFullFrames()
-    flows = dp.getOpticalFlows()
-    rgb.append(frames)
-    flow.append(flows)
-rgb = np.stack(rgb, axis=0)
-flow = np.stack(flow, axis=0)
-print(rgb.shape, flow.shape, labels.shape)
+def input_fn():
+    def f(x): return 0 if x == 'REAL' else 1
+    filepath = 'data/train_sample_videos'
+    segment_size = 5
+    datapath = os.path.join(filepath, 'metadata.json')
+    data = pd.read_json(os.path.join(datapath)).T
+    files = [os.path.join(filepath, f) for f in os.listdir(filepath)
+            if 'metadata.json' not in f]
+    labels = [f(data.at[x.split('/')[-1], 'label']) for x in files]
+    labels = to_categorical(labels, num_classes=2)
+    files = files[:5]
+    labels = labels[:5]
+    rgb = []
+    flow = []
+    def dataGenerator():
+        for f, label in zip(files, labels):
+            dp = DataPrep(segment_size=segment_size)
+            frames = dp.prepFullFrames()
+            flows = dp.getOpticalFlows()
+            # rgb.append(frames)
+            # flow.append(flows)
+            # rgb = np.stack(rgb, axis=0)
+            # flow = np.stack(flow, axis=0)
+            yield {'rgb_input': frames, 'flow_input': flows}, label
+    dataset = tf.data.Dataset.from_generator(
+        dataGenerator,
+        output_types=(
+            {"rgb_input": tf.int8, "flow_input": tf.float32}, tf.int8),
+        output_shapes=(
+            {
+                "rgb_input": (segment_size, 256, 256, 3),
+                "flow_input": (segment_size - 1, 256, 256, 2)
+            },
+            (2,))
+    )
+    dataset = dataset.batch(1)
+    return dataset
 # %%
 # np.stack(rgb_input, axis=0).shape
 # %%
-dataset = input_fn(filepath)
+dataset = input_fn()
 for x in dataset.take(1):
     data_dict, label = x
     print(label.numpy())
@@ -319,8 +330,10 @@ model = Model(
         "rgb_input": rgb_input,
         "flow_input": flow_input,
     },
-    outputs=final_output
+    outputs=final_output,
+    name='my_model'
 )
+# print()
 # model.summary()
 tf.keras.utils.plot_model(
     model,
@@ -336,8 +349,9 @@ model.compile(
     metrics=['acc'])
 # filepath = 'data/train_sample_videos'
 model.fit(
-    x={'rgb_input': rgb, 'flow_input': flow},
-    y=labels,
+    # x={'rgb_input': rgb, 'flow_input': flow},
+    # y=labels,
+    input_fn(),
     epochs=2,
     verbose=1,
     # class_weight=class_weights

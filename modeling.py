@@ -20,6 +20,14 @@ from DataPrep import DataPrep
 
 
 # %%
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+
+# %%
 
 # TODO: add variables for frame height and width
 # def input_fn(filepath, batch_size=10, segment_size=5):
@@ -90,7 +98,18 @@ class InputStream(tf.keras.Model):
             return_sequences=True,
             dropout=0.5
         )
+        self.bn1 = BatchNormalization()
         self.convLstm2 = ConvLSTM2D(
+            filters=filters,
+            kernel_size=kernel_size,
+            strides=1,
+            padding='same',
+            data_format='channels_last',
+            return_sequences=True,
+            dropout=0.5
+        )
+        self.bn2 = BatchNormalization()
+        self.convLstm3 = ConvLSTM2D(
             filters=filters,
             kernel_size=kernel_size,
             strides=1,
@@ -99,10 +118,15 @@ class InputStream(tf.keras.Model):
             return_sequences=False,
             dropout=0.5
         )
-        self.bn = BatchNormalization()
+        self.bn3 = BatchNormalization()
         self.act = LeakyReLU()
         self.flatten = tf.keras.layers.Flatten()
-        self.dense = Dense(512)
+        self.dense1 = Dense(128)
+        self.act1 = LeakyReLU()
+        self.dense2 = Dense(128)
+        self.act2 = LeakyReLU()
+        self.dense3 = Dense(128)
+        self.act3 = LeakyReLU()
         self.dropout = tf.keras.layers.Dropout(0.5)
         self.out_layer = Dense(2)
 
@@ -110,20 +134,21 @@ class InputStream(tf.keras.Model):
     # training
     def call(self, input_tensor, training=False):
         x = self.convLstm1(input_tensor)
-        x = self.bn(x)
-        x = self.convLstm1(x)
-        x = self.bn(x)
+        x = self.bn1(x)
         x = self.convLstm2(x)
-        x = self.bn(x)
+        x = self.bn2(x)
+        x = self.convLstm3(x)
+        x = self.bn3(x)
         x = self.act(x)
         x = self.flatten(x)
-        x = self.dense(x)
-        x = self.act(x)
-        x = self.dense(x)
-        x = self.act(x)
-        x = self.dense(x)
-        x = self.act(x)
-        x = self.dropout(x)
+        x = self.dense1(x)
+        x = self.act1(x)
+        x = self.dense2(x)
+        x = self.act2(x)
+        x = self.dense3(x)
+        x = self.act3(x)
+        if training:
+            x = self.dropout(x)
         return self.out_layer(x)
 
 
@@ -169,10 +194,8 @@ class InputStream(tf.keras.Model):
 
 
 # %%
-
-# %%
-rgb_stream = InputStream(3, 32, 'rgb_stream')
-flow_stream = InputStream(3, 32, 'flow_stream')
+rgb_stream = InputStream(3, 4, 'rgb_stream')
+flow_stream = InputStream(3, 4, 'flow_stream')
 rgb_input = tf.keras.Input(shape=(5, 256, 256, 3), name='rgb_input')
 flow_input = tf.keras.Input(shape=(4, 256, 256, 2), name='flow_input')
 rgb = rgb_stream(rgb_input)
@@ -186,6 +209,7 @@ model = Model(
     name='my_model'
 )
 model.summary()
+
 
 # %%
 tf.keras.utils.plot_model(
@@ -204,7 +228,7 @@ model.compile(
     metrics=['acc'])
 model.fit(
     train_data,
-    epochs=25,
+    epochs=10,
     verbose=1,
     class_weight=class_weights
 )
@@ -218,6 +242,7 @@ model.evaluate(
 
 
 # %%
+
 
 
 # %%
@@ -256,3 +281,5 @@ print('everything is working now')
 f = 'data/train_sample_videos/adhsbajydo.mp4'
 dp = DataPrep(segment_size=segment_size)
 frames = dp.prepFullFrames(filepath=f)
+
+

@@ -11,9 +11,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tqdm import tqdm
 
 from DataPrep import DataPrep
-
+pd.options.display.max_rows = 1000
 # %%
 datapath = 'data/train_sample_videos'
 
@@ -31,21 +32,26 @@ fpScaleFactor = 1.5
 ffMinNeigbors = 2
 fpMinNeighbors = 2
 
+# TODO: rewrite using dlib
+# TODO: add logic for when num_faces == 0 to equalize the histogram
+# TODO: add logic for when num_faces is still == 0 to grab the full frame
+# TODO: add logic for when num_faces > 1 to select the largest face
 
-def getFaces(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    gray = cv2.equalizeHist(gray)
+
+def getFaces(frame, sf, mn):
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    frame = cv2.equalizeHist(frame)
     faces_rois = FF.detectMultiScale(
-        image=gray,
-        scaleFactor=ffScaleFactor,
-        minNeighbors=ffMinNeigbors
+        image=frame,
+        scaleFactor=sf,
+        minNeighbors=mn
     )
-    if len(faces_rois) < 1:
-        faces_rois = FP.detectMultiScale(
-            image=gray,
-            scaleFactor=fpScaleFactor,
-            minNeighbors=fpMinNeighbors
-        )
+    # if len(faces_rois) < 1:
+    #     faces_rois = FP.detectMultiScale(
+    #         image=frame,
+    #         scaleFactor=fpScaleFactor,
+    #         minNeighbors=fpMinNeighbors
+    #     )
     return faces_rois
 
 
@@ -107,7 +113,6 @@ showFaces(frame, faces)
 # %%
 # TODO: need to handle dark videos and make them brighter
 
-
 # %%
 fd = dlib.get_frontal_face_detector()
 # %%
@@ -135,19 +140,53 @@ showFaces(frame, faces2, rects=faces2)
 metadata.shape
 
 # %%
-idx = np.random.choice(metadata.index, 20, replace=False)
-for i in idx:
+fd = dlib.get_frontal_face_detector()
+idx = np.random.choice(metadata['Unnamed: 0'].values, 40, replace=False)
+# fcv = []
+fdl = []
+# sf = 1.2
+# mn = 7
+for i in tqdm(metadata['Unnamed: 0'].values):
+    # for i in tqdm(idx):
     vid = os.path.join(datapath, i)
     frames = getFrameSnippet(vid, 0)
     frame = frames[0]
-    start = time.time()
-    faces1 = getFaces(frame)
-    print(f"cv2 runtime: {time.time() - start}")
-    print(f'cv2 number of faces {len(faces1)}')
-    start = time.time()
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # frame = cv2.equalizeHist(frame)
+    # start = time.time()
+    # faces1 = getFaces(frame, sf, mn)
+    # fcv.append(len(faces1))
+    # print(f"cv2 runtime: {time.time() - start}")
+    # print(f'cv2 number of faces {len(faces1)}')
+    # start = time.time()
     faces2 = fd(frame, 1)
-    print(f"dlib runtime: {time.time() - start}")
-    print(f'dlib number of faces {len(faces2)}')
+    if len(faces2) < 1:
+        frame = cv2.equalizeHist(frame)
+        faces2 = fd(frame, 1)
+    fdl.append(len(faces2))
+    # print(f"dlib runtime: {time.time() - start}")
+    # print(f'dlib number of faces {len(faces2)}')
+# for a, b in zip(fcv, fdl):
+#     print(a, b)
+# fcv = np.array(fcv)
+# print('\n',np.mean(fcv), np.min(fcv), np.max(fcv), np.sum(fcv == 1), np.sum(fcv == 0))
+# fdl = np.array(fdl)
+# print('\n',np.mean(fdl), np.min(fdl), np.max(fdl), np.sum(fdl == 1), np.sum(fdl == 0))
+# %%
+# metadata['cv2_faces'] = fcv
+# metadata['dlib_faces'] = fdl
+# metadata.to_csv('metadata.csv')
 
+# %%
+# metadata = pd.read_csv('metadata.csv')
+metadata['dlib_new2'] = fdl
+# metadata
+# %%
+cols = [c for c in metadata.columns if 'cv2' in c or 'dlib' in c]
+df = metadata.loc[:, cols]
+df.describe()
+# %%
+for c in df.columns:
+    print(c, np.sum(df[c].values == 1), np.sum(df[c].values == 0))
 
 # %%

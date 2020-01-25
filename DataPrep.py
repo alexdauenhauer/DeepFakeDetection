@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import pandas as pd
 from dlib import get_frontal_face_detector
+import tensorflow as tf
 
 # %%
 
@@ -205,7 +206,7 @@ class DataPrepDlib():
         self.segment_size = segment_size
         self.frames = None
         self.flows = None
-
+    
     def getFrameSnippet(self, filepath, start_frame=None):
         cap = cv2.VideoCapture(filepath)
         frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -240,7 +241,6 @@ class DataPrepDlib():
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
-    @staticmethod
     def resize(frame, height=128, width=128):
         # TODO: will want to test different sizes here as a hyperparameter
         return cv2.resize(frame, (height, width))
@@ -254,7 +254,9 @@ class DataPrepDlib():
             frame = cv2.equalizeHist(frame)
             faces = self.fd(frame, 1)
         if len(faces) < 1:
-            frame = cv2.equalizeHist(orig_frame)
+#             frame = cv2.cvtColor(orig_frame, cv2.COLOR_BGR2GRAY)
+#             frame = cv2.equalizeHist(frame)
+            faces = orig_frame
         return faces
 
     def getFaceRois(self, frame, faces):

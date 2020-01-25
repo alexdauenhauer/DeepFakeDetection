@@ -16,7 +16,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from_generator = tf.data.Dataset.from_generator
 
-from DataPrep import DataPrep
+from DataPrep import DataPrepDlib
 
 
 # %%
@@ -53,12 +53,13 @@ print(len(x_train), len(y_train), len(x_test), len(y_test))
 # %%
 
 # @tf.function
-def input_fn(files, labels, segment_size=5, batch_size=1):
+def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         for f, label in zip(files, labels):
-            dp = DataPrep(segment_size=segment_size)
-            frames = dp.prepFullFrames(filepath=f)
-            flows = dp.getOpticalFlows()
+            dp = DataPrepDlib(segment_size=segment_size)
+            # frames = dp.prepFullFrames(filepath=f)
+            # flows = dp.getOpticalFlows()
+            frames, flows = dp.prepVid(filepath=f)
             yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
         dataGenerator,
@@ -70,8 +71,8 @@ def input_fn(files, labels, segment_size=5, batch_size=1):
             tf.int8),
         output_shapes=(
             {
-                "rgb_input": (segment_size, 256, 256, 3),
-                "flow_input": (segment_size - 1, 256, 256, 2)
+                "rgb_input": (segment_size, rsz[0], rsz[1], 3),
+                "flow_input": (segment_size - 1, rsz[0], rsz[1], 2)
             },
             (2,))
     )
@@ -244,7 +245,6 @@ model.evaluate(
 # %%
 
 
-
 # %%
 # DEBUGGING
 dataset = input_fn(filepath, batch_size=1)
@@ -281,5 +281,3 @@ print('everything is working now')
 f = 'data/train_sample_videos/adhsbajydo.mp4'
 dp = DataPrep(segment_size=segment_size)
 frames = dp.prepFullFrames(filepath=f)
-
-

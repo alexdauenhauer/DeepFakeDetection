@@ -200,9 +200,8 @@ class DataPrepCv2():
 
 class DataPrepDlib():
 
-    def __init__(self, datapath, segment_size=5):
+    def __init__(self, segment_size=5):
         self.fd = get_frontal_face_detector()
-        self.datapath
         self.segment_size = segment_size
         self.frames = None
         self.flows = None
@@ -224,7 +223,6 @@ class DataPrepDlib():
             ret, self.frames[j] = cap.read()
             j += 1
         cap.release()
-        # return self.frames
 
     def getOpticalFlows(self):
         if self.frames is not None:
@@ -241,7 +239,6 @@ class DataPrepDlib():
                 self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
-        # return self.flows
 
     @staticmethod
     def resize(frame, height=128, width=128):
@@ -271,29 +268,23 @@ class DataPrepDlib():
             if face_rois is None:
                 face_rois = roi
             else:
-                face_rois = np.hstack((face_rois, roi))
+                face_rois.hstack((face_rois, roi))
         face_rois = self.resize(face_rois)
         return face_rois
 
     def prepVid(self, filepath, start_frame=None, rsz=(128, 128)):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
-        rgb_rois = None
-        flow_rois = None
+        rgb_rois = []
+        flow_rois = []
         for i, frame in enumerate(self.frames):
             faces = self.getFaces(frame)
-            if rgb_rois is None:
-                rgb_rois = self.getFaceRois(frame, faces)
-            else:
-                rois = self.getFaceRois(frame, faces)
-                rgb_rois = np.stack((rgb_rois, rois))
+            rgb_rois.append(self.getFaceRois(frame, faces))
             if i == 0:
                 continue
             else:
                 flow = self.flows[i - 1]
-                if flow_rois is None:
-                    flow_rois = self.getFaceRois(flow, faces)
-                else:
-                    rois = self.getFaceRois(flow, faces)
-                    flow_rois = np.stack((flow_rois, rois))
+                flow_rois.append(self.getFaceRois(flow, faces))
+        rgb_rois = np.stack(rgb_rois)
+        flow_rois = np.stack(flow_rois)
         return rgb_rois, flow_rois

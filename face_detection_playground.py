@@ -13,13 +13,41 @@ import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
 
-from DataPrep import DataPrep
+from DataPrep import DataPrepDlib
 pd.options.display.max_rows = 1000
 # %%
 datapath = 'data/train_sample_videos'
 
 metadata = pd.read_json(os.path.join(datapath, 'metadata.json')).T
 metadata.head()
+# %%
+filepath = os.path.join(datapath, metadata.index[0])
+filepath
+# %%
+dp = DataPrepDlib()
+start = time.time()
+rgb, flow = dp.prepVid(filepath)
+print(time.time() - start)
+rgb.shape, flow.shape
+# %%
+a = [[1, 1], [1, 1], [1, 1]]
+np.array(a).shape
+
+# %%
+
+# %%
+a = np.array([[1, 1], [1, 1]])
+b = np.array([[1, 1], [1, 1]])
+a = np.stack((a, b))
+a.shape
+c = np.array([[1, 1], [1, 1]])
+np.concatenate((a, c), axis=1).shape
+
+
+# %%
+a = [1]
+if not a:
+    print('yes')
 # %%
 fcPath = '/home/alex/projects/PublicRepos/opencv/data/haarcascades'
 

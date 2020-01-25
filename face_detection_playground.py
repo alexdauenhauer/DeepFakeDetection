@@ -30,10 +30,13 @@ rgb, flow = dp.prepVid(filepath)
 print(time.time() - start)
 rgb.shape, flow.shape
 # %%
+import numpy as np
 a = [[1, 1], [1, 1], [1, 1]]
-np.array(a).shape
+isinstance(np.array(a), np.ndarray)
 
 # %%
+np.array
+type(np.array(a))
 
 # %%
 a = np.array([[1, 1], [1, 1]])

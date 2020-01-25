@@ -261,7 +261,7 @@ class DataPrepDlib():
         return faces
 
     def getFaceRois(self, frame, faces):
-        if isinstance(faces, np.array):
+        if isinstance(faces, np.ndarray):
             return self.resize(faces)
         f = faces[0]
         h = f.bottom() - f.top()

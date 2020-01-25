@@ -57,8 +57,7 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         for f, label in zip(files, labels):
             dp = DataPrepDlib(segment_size=segment_size)
-            # frames = dp.prepFullFrames(filepath=f)
-            # flows = dp.getOpticalFlows()
+            print('\n', f)
             frames, flows = dp.prepVid(filepath=f)
             yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
@@ -78,8 +77,26 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     )
     dataset = dataset.batch(batch_size)
     return dataset
+# %%
+# dp = DataPrepDlib(segment_size=segment_size)
+# f = 'data/train_sample_videos/diuzrpqjli.mp4'
+# print('\n', f)
+# frames, flows = dp.prepVid(filepath=f)
+# print(frames.shape, flows.shape)
 
 
+# %%
+# labels = y_train[:5]
+# train_data = {'rgb_input':[], 'flow_input':[]}
+# for i in range(5):
+#     dp = DataPrepDlib(segment_size=5)
+#     f = 'data/train_sample_videos/diuzrpqjli.mp4'
+#     frames, flows = dp.prepVid(filepath=f)
+#     print(frames.shape, flows.shape)
+#     train_data['rgb_input'].append(frames)
+#     train_data['flow_input'].append(flows)
+# # %%
+# print('test complete')
 # %%
 batch_size = 1
 rsz = (128, 128)

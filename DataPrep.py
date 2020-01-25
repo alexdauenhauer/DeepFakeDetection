@@ -262,7 +262,7 @@ class DataPrepDlib():
 
     def getFaceRois(self, frame, faces):
         if isinstance(faces, np.ndarray):
-            return self.resize(faces)
+            return self.resize(frame)
         f = faces[0]
         h = f.bottom() - f.top()
         face_rois = None
@@ -273,7 +273,7 @@ class DataPrepDlib():
             if face_rois is None:
                 face_rois = roi
             else:
-                face_rois.hstack((face_rois, roi))
+                face_rois = np.hstack((face_rois, roi))
         face_rois = self.resize(face_rois)
         return face_rois
 
@@ -284,12 +284,14 @@ class DataPrepDlib():
         flow_rois = []
         for i, frame in enumerate(self.frames):
             faces = self.getFaces(frame)
-            rgb_rois.append(self.getFaceRois(frame, faces))
+            rois = self.getFaceRois(frame, faces)
+            rgb_rois.append(rois)
             if i == 0:
                 continue
             else:
                 flow = self.flows[i - 1]
-                flow_rois.append(self.getFaceRois(flow, faces))
+                rois = self.getFaceRois(flow, faces)
+                flow_rois.append(rois)
         rgb_rois = np.stack(rgb_rois)
         flow_rois = np.stack(flow_rois)
         return rgb_rois, flow_rois

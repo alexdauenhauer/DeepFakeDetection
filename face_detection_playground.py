@@ -24,6 +24,7 @@ metadata.head()
 filepath = os.path.join(datapath, metadata.index[0])
 filepath
 # %%
+filepath = 'data/train_sample_videos/diuzrpqjli.mp4'
 dp = DataPrepDlib()
 start = time.time()
 rgb, flow = dp.prepVid(filepath)

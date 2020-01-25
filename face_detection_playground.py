@@ -119,12 +119,70 @@ fd = dlib.get_frontal_face_detector()
 dir(fd)
 # %%
 start = time.time()
+vid_name = metadata.index[1]
+vid = os.path.join(datapath, vid_name)
+frames = getFrameSnippet(vid, 0)
+frame = frames[0]
+faces = getFaces(frame, 1.2, 7)
 faces2 = fd(frame, 1)
-len(faces2)
+print(len(faces2), len(faces))
 print(time.time() - start)
 
 # %%
-f = faces2[0]
+for f in faces2:
+    print(f)
+
+# %%
+rgb = []
+for f in faces2:
+    x, y, r, b = f.left(), f.top(), f.right(), f.bottom()
+    w = r - x
+    h = b - y
+    rgb_face = frame[y:y + h, x:x + w, :]
+    rgb.append(rgb_face)
+len(rgb)
+
+# %%
+rgb[0].shape, rgb[1].shape
+# %%
+
+
+def getFaceRois(frame, faces, flow=None):
+    f = faces[0]
+    h = f.bottom() - f.top()
+    rgb_faces = None
+    flow_faces = None
+    for face in faces:
+        x, y, r = f.left(), f.top(), f.right()
+        w = r - x
+        rgb_face = frame[y:y + h, x:x + w, :]
+        if rgb_faces is None:
+            rgb_faces = rgb_face
+        else:
+            rgb_faces = np.hstack((rgb_faces, rgb_face))
+        if flow is not None:
+            flow_face = flow[y:y + h, x:x + w, :]
+            if flow_faces is None:
+                flow_faces = flow_face
+            else:
+                flow_faces = np.hstack((flow_faces, flow_face))
+    # rgb_faces = self.resize(rgb_faces)
+    # flow_faces = self.resize(flow_faces)
+    return rgb_faces, flow_faces,
+
+
+# %%
+rgb, flow = getFaceRois(frame, faces2)
+print(rgb.shape)
+# %%
+for f in faces2:
+    x, y, r, b = f.left(), f.top(), f.right(), f.bottom()
+    w = r - x
+    h = b - y
+    print(x, y, w, h)
+
+
+# %%
 
 # %%
 
@@ -136,6 +194,8 @@ print(x, y, w, h)
 showFaces(frame, faces2, rects=faces2)
 
 
+# %%
+showFaces(frame, faces)
 # %%
 metadata.shape
 
@@ -152,6 +212,7 @@ for i in tqdm(metadata['Unnamed: 0'].values):
     frames = getFrameSnippet(vid, 0)
     frame = frames[0]
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # frame = cv2.equalizeHist(frame)
     # start = time.time()
     # faces1 = getFaces(frame, sf, mn)
@@ -175,11 +236,10 @@ for i in tqdm(metadata['Unnamed: 0'].values):
 # %%
 # metadata['cv2_faces'] = fcv
 # metadata['dlib_faces'] = fdl
-# metadata.to_csv('metadata.csv')
 
 # %%
 # metadata = pd.read_csv('metadata.csv')
-metadata['dlib_new2'] = fdl
+metadata['dlib_new3'] = fdl
 # metadata
 # %%
 cols = [c for c in metadata.columns if 'cv2' in c or 'dlib' in c]
@@ -187,6 +247,12 @@ df = metadata.loc[:, cols]
 df.describe()
 # %%
 for c in df.columns:
-    print(c, np.sum(df[c].values == 1), np.sum(df[c].values == 0))
+    print(
+        c, np.sum(
+            df[c].values > 1), np.sum(
+            df[c].values == 1), np.sum(
+                df[c].values == 0))
 
 # %%
+
+metadata.to_csv('metadata.csv')

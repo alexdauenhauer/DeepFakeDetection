@@ -9,19 +9,20 @@ import cv2
 # import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from dlib import get_frontal_face_detector
 
 # %%
 
 
-class DataPrep():
+class DataPrepCv2():
     def __init__(self,
-                 haar_cascades_path=None,
+                 #  haar_cascades_path=None,
                  datapath=None,
                  labelpath=None,
                  segment_size=10):
-        if not haar_cascades_path:
-            # TODO: move this folder to repo for relative path usage
-            haar_cascades_path = '/home/alex/projects/PublicRepos/opencv/data/haarcascades'
+        # if not haar_cascades_path:
+        #     # TODO: move this folder to repo for relative path usage
+        #     haar_cascades_path = '/home/alex/projects/PublicRepos/opencv/data/haarcascades'
         if not datapath:
             self.datapath = 'data/train_sample_videos'
         if not labelpath:
@@ -29,15 +30,16 @@ class DataPrep():
         # self.labels = pd.read_json(self.labelpath)
         # if self.labels.shape[1] > self.labels.shape[0]:
         #     self.labels = self.labels.T
-        fcPath = haar_cascades_path
-        frontface = 'haarcascade_frontalface_default.xml'
-        profileface = 'haarcascade_profileface.xml'
-        self.ff = cv2.CascadeClassifier(path.join(fcPath, frontface))
-        self.fp = cv2.CascadeClassifier(path.join(fcPath, profileface))
-        self.ffScaleFactor = 1.5
-        self.fpScaleFactor = 1.5
-        self.ffMinNeigbors = 2
-        self.fpMinNeighbors = 2
+        # fcPath = haar_cascades_path
+        # frontface = 'haarcascade_frontalface_default.xml'
+        # profileface = 'haarcascade_profileface.xml'
+        # self.ff = cv2.CascadeClassifier(path.join(fcPath, frontface))
+        # self.fp = cv2.CascadeClassifier(path.join(fcPath, profileface))
+        # self.ffScaleFactor = 1.5
+        # self.fpScaleFactor = 1.5
+        # self.ffMinNeigbors = 2
+        # self.fpMinNeighbors = 2
+        self.fd = get_frontal_face_detector()
         self.segment_size = segment_size
         self.frames = None
         self.flows = None
@@ -194,3 +196,104 @@ class DataPrep():
         for i, frame in enumerate(self.frames):
             frames[i] = self.resize(frame, *rsz)
         self.frames = frames
+
+
+class DataPrepDlib():
+
+    def __init__(self, datapath, segment_size=5):
+        self.fd = get_frontal_face_detector()
+        self.datapath
+        self.segment_size = segment_size
+        self.frames = None
+        self.flows = None
+
+    def getFrameSnippet(self, filepath, start_frame=None):
+        cap = cv2.VideoCapture(filepath)
+        frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if not start_frame:
+            start_frame = choice(range(int(frameCount)))
+        if frameCount - start_frame < self.segment_size:
+            start_frame = 0
+        self.frames = np.empty(
+            (self.segment_size, frameHeight, frameWidth, 3), dtype=np.uint8)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        j = 0
+        while j < self.segment_size:
+            ret, self.frames[j] = cap.read()
+            j += 1
+        cap.release()
+        # return self.frames
+
+    def getOpticalFlows(self):
+        if self.frames is not None:
+            self.flows = np.empty(
+                (self.frames.shape[0] - 1,
+                 self.frames.shape[1],
+                 self.frames.shape[2],
+                 2))
+            prvs = cv2.cvtColor(
+                self.frames[0].astype(np.uint8), cv2.COLOR_BGR2GRAY)
+            for i in range(1, int(self.frames.shape[0])):
+                frame = cv2.cvtColor(
+                    self.frames[i].astype(np.uint8), cv2.COLOR_BGR2GRAY)
+                self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
+                    prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                prvs = frame
+        # return self.flows
+
+    @staticmethod
+    def resize(frame, height=128, width=128):
+        # TODO: will want to test different sizes here as a hyperparameter
+        return cv2.resize(frame, (height, width))
+
+    def getFaces(self, frame, grayscale=True):
+        orig_frame = frame
+        if grayscale:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = self.fd(frame, 1)
+        if len(faces) < 1:
+            frame = cv2.equalizeHist(frame)
+            faces = self.fd(frame, 1)
+        if len(faces) < 1:
+            frame = cv2.equalizeHist(orig_frame)
+        return faces
+
+    def getFaceRois(self, frame, faces):
+        f = faces[0]
+        h = f.bottom() - f.top()
+        face_rois = None
+        for face in faces:
+            x, y, r = f.left(), f.top(), f.right()
+            w = r - x
+            roi = frame[y:y + h, x:x + w, :]
+            if face_rois is None:
+                face_rois = roi
+            else:
+                face_rois = np.hstack((face_rois, roi))
+        face_rois = self.resize(face_rois)
+        return face_rois
+
+    def prepVid(self, filepath, start_frame=None, rsz=(128, 128)):
+        self.getFrameSnippet(filepath, start_frame)
+        self.getOpticalFlows()
+        rgb_rois = None
+        flow_rois = None
+        for i, frame in enumerate(self.frames):
+            faces = self.getFaces(frame)
+            if rgb_rois is None:
+                rgb_rois = self.getFaceRois(frame, faces)
+            else:
+                rois = self.getFaceRois(frame, faces)
+                rgb_rois = np.stack((rgb_rois, rois))
+            if i == 0:
+                continue
+            else:
+                flow = self.flows[i - 1]
+                if flow_rois is None:
+                    flow_rois = self.getFaceRois(flow, faces)
+                else:
+                    rois = self.getFaceRois(flow, faces)
+                    flow_rois = np.stack((flow_rois, rois))
+        return rgb_rois, flow_rois

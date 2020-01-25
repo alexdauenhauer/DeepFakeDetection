@@ -206,7 +206,7 @@ class DataPrepDlib():
         self.segment_size = segment_size
         self.frames = None
         self.flows = None
-    
+
     def getFrameSnippet(self, filepath, start_frame=None):
         cap = cv2.VideoCapture(filepath)
         frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -241,6 +241,7 @@ class DataPrepDlib():
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
+    @staticmethod
     def resize(frame, height=128, width=128):
         # TODO: will want to test different sizes here as a hyperparameter
         return cv2.resize(frame, (height, width))

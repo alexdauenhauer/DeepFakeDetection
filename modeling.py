@@ -81,9 +81,10 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
 
 
 # %%
-batch_size = 10
-train_data = input_fn(x_train, y_train, batch_size=batch_size)
-test_data = input_fn(x_test, y_test, batch_size=batch_size)
+batch_size = 1
+rsz = (128, 128)
+train_data = input_fn(x_train, y_train, batch_size=batch_size, rsz=rsz)
+test_data = input_fn(x_test, y_test, batch_size=batch_size, rsz=rsz)
 
 
 # %%
@@ -197,8 +198,8 @@ class InputStream(tf.keras.Model):
 # %%
 rgb_stream = InputStream(3, 4, 'rgb_stream')
 flow_stream = InputStream(3, 4, 'flow_stream')
-rgb_input = tf.keras.Input(shape=(5, 256, 256, 3), name='rgb_input')
-flow_input = tf.keras.Input(shape=(4, 256, 256, 2), name='flow_input')
+rgb_input = tf.keras.Input(shape=(5, rsz[0], rsz[1], 3), name='rgb_input')
+flow_input = tf.keras.Input(shape=(4, rsz[0], rsz[1], 2), name='flow_input')
 rgb = rgb_stream(rgb_input)
 flow = flow_stream(flow_input)
 final_average = tf.keras.layers.average([rgb, flow])
@@ -229,7 +230,7 @@ model.compile(
     metrics=['acc'])
 model.fit(
     train_data,
-    epochs=10,
+    epochs=1,
     verbose=1,
     class_weight=class_weights
 )

@@ -6,8 +6,8 @@ import time
 
 import cv2
 import dlib
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
+# import matplotlib.patches as patches
+# import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -26,7 +26,7 @@ filepath = os.path.join(datapath, metadata.index[0])
 filepath
 # %%
 filepath = 'data/train_sample_videos/diuzrpqjli.mp4'
-dp = DataPrepDlib()
+dp = DataPrepDlib(rsz=(128,128))
 start = time.time()
 rgb, flow = dp.prepVid(filepath)
 print(time.time() - start)

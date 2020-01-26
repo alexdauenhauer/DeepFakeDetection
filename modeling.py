@@ -4,6 +4,7 @@
 import os
 import pickle
 import time
+from os.path import dirname, abspath
 
 import numpy as np
 import pandas as pd
@@ -15,8 +16,12 @@ from tensorflow.keras.layers import (BatchNormalization, ConvLSTM2D, Dense,
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from_generator = tf.data.Dataset.from_generator
+ROOT_DIR = dirname(abspath(__file__))
+import sys
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
 
-from DataPrep import DataPrepDlib, DataPrepCv2
+from DataPrep import DataPrepDlib
 
 
 # %%
@@ -62,10 +67,9 @@ print(len(x_train), len(y_train), len(x_test), len(y_test))
 def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         for f, label in zip(files, labels):
-            # dp = DataPrepDlib(segment_size=segment_size)
-            # frames, flows = dp.prepVid(filepath=f)
-            dp = DataPrepCv2(segment_size=segment_size)
+            dp = DataPrepDlib(segment_size=segment_size, rsz=rsz)
             frames, flows = dp.prepVid(filepath=f)
+            # frames, flows = dp.prepFullFrames(filepath=f)
             yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
         dataGenerator,
@@ -100,7 +104,7 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
 # %%
 batch_size = 10
 segment_size = 10
-rsz = (512, 512)
+rsz = (128, 128)
 train_data = input_fn(
     x_train,
     y_train,
@@ -173,8 +177,12 @@ class InputStream(tf.keras.Model):
         x = self.flatten(x)
         x = self.dense1(x)
         x = self.act1(x)
+        if training:
+            x = self.dropout(x)
         x = self.dense2(x)
         x = self.act2(x)
+        if training:
+            x = self.dropout(x)
         x = self.dense3(x)
         x = self.act3(x)
         if training:
@@ -226,8 +234,12 @@ class InputStream(tf.keras.Model):
 # %%
 rgb_stream = InputStream(3, 4, 'rgb_stream')
 flow_stream = InputStream(3, 4, 'flow_stream')
-rgb_input = tf.keras.Input(shape=(5, rsz[0], rsz[1], 3), name='rgb_input')
-flow_input = tf.keras.Input(shape=(4, rsz[0], rsz[1], 2), name='flow_input')
+rgb_input = tf.keras.Input(
+    shape=(segment_size, rsz[0], rsz[1], 3),
+    name='rgb_input')
+flow_input = tf.keras.Input(
+    shape=(segment_size - 1, rsz[0], rsz[1], 2),
+    name='flow_input')
 rgb = rgb_stream(rgb_input)
 flow = flow_stream(flow_input)
 final_average = tf.keras.layers.average([rgb, flow])
@@ -284,8 +296,9 @@ model.compile(
     loss='binary_crossentropy',
     metrics=['acc'])
 model.fit(
-    train_data,
-    epochs=1,
+    x=train_data,
+    validation_data=test_data,
+    epochs=25,
     verbose=1,
     class_weight=class_weights
 )

@@ -233,27 +233,37 @@ class DataPrepDlib():
                  self.frames.shape[1],
                  self.frames.shape[2],
                  2))
-            prvs = cv2.cvtColor(
+            # prvs = cv2.cvtColor(
+            #     self.frames[0].astype(np.uint8), cv2.COLOR_BGR2GRAY)
+            prvs = cv2.cuda.cvtColor(
                 self.frames[0].astype(np.uint8), cv2.COLOR_BGR2GRAY)
             for i in range(1, int(self.frames.shape[0])):
-                frame = cv2.cvtColor(
+                # frame = cv2.cvtColor(
+                #     self.frames[i].astype(np.uint8), cv2.COLOR_BGR2GRAY)
+                frame = cv2.cuda.cvtColor(
                     self.frames[i].astype(np.uint8), cv2.COLOR_BGR2GRAY)
-                self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
+                # self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
+                #     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+                self.flows[i - 1] = cv2.cuda.calcOpticalFlowFarneback(
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
     def resize(self, frame):
         # TODO: will want to test different sizes here as a hyperparameter
         height, width = self.rsz
-        return cv2.resize(frame, (height, width))
+        # return cv2.resize(frame, (height, width))
+        return cv2.cuda.resize(frame, (height, width))
 
     def getFaces(self, frame, grayscale=True):
         orig_frame = frame
+        # if grayscale:
+        #     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if grayscale:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.cuda.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.fd(frame, 0)
         if len(faces) < 1:
-            frame = cv2.equalizeHist(frame)
+            # frame = cv2.equalizeHist(frame)
+            frame = cv2.cuda.equalizeHist(frame)
             faces = self.fd(frame, 0)
         if len(faces) < 1:
             faces = orig_frame

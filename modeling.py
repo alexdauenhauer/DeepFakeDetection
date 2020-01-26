@@ -102,8 +102,8 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
 # x = tf.keras.layers.Dropout(0.5)
 # x = Dense(1)
 # %%
-batch_size = 10
-segment_size = 10
+batch_size = 4
+segment_size = 5
 rsz = (128, 128)
 train_data = input_fn(
     x_train,
@@ -298,7 +298,7 @@ model.compile(
 model.fit(
     x=train_data,
     validation_data=test_data,
-    epochs=25,
+    epochs=10,
     verbose=1,
     class_weight=class_weights
 )

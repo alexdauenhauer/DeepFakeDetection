@@ -20,11 +20,15 @@ from DataPrep import DataPrepDlib
 
 
 # %%
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    # Currently, memory growth needs to be the same across GPUs
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
+import dlib
+dlib.DLIB_USE_CUDA
+
+
+# %%
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# if gpus:
+#     for gpu in gpus:
+#         tf.config.experimental.set_memory_growth(gpu, True)
 
 
 # %%
@@ -35,7 +39,7 @@ if gpus:
 filepath = 'data/train_sample_videos'
 segment_size = 5
 datapath = os.path.join(filepath, 'metadata.json')
-data = pd.read_json(os.path.join(datapath)).T
+data = pd.read_json(datapath).T
 files = [os.path.join(filepath, f) for f in data.index]
 labels = data.label.values
 x_train, x_test, y_train, y_test = train_test_split(
@@ -43,10 +47,12 @@ x_train, x_test, y_train, y_test = train_test_split(
 class_weights = compute_class_weight('balanced', np.unique(y_train), y_train)
 for k, v in zip(np.unique(y_train), class_weights):
     print(k, v)
+# y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
+# y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
+# y_train = to_categorical(y_train, num_classes=2)
+# y_test = to_categorical(y_test, num_classes=2)
 y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
 y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
-y_train = to_categorical(y_train, num_classes=2)
-y_test = to_categorical(y_test, num_classes=2)
 print(len(x_train), len(y_train), len(x_test), len(y_test))
 
 
@@ -57,7 +63,6 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         for f, label in zip(files, labels):
             dp = DataPrepDlib(segment_size=segment_size)
-            print('\n', f)
             frames, flows = dp.prepVid(filepath=f)
             yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
@@ -77,26 +82,19 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     )
     dataset = dataset.batch(batch_size)
     return dataset
-# %%
-# dp = DataPrepDlib(segment_size=segment_size)
-# f = 'data/train_sample_videos/diuzrpqjli.mp4'
-# print('\n', f)
-# frames, flows = dp.prepVid(filepath=f)
-# print(frames.shape, flows.shape)
 
 
 # %%
-# labels = y_train[:5]
-# train_data = {'rgb_input':[], 'flow_input':[]}
-# for i in range(5):
-#     dp = DataPrepDlib(segment_size=5)
-#     f = 'data/train_sample_videos/diuzrpqjli.mp4'
-#     frames, flows = dp.prepVid(filepath=f)
-#     print(frames.shape, flows.shape)
-#     train_data['rgb_input'].append(frames)
-#     train_data['flow_input'].append(flows)
-# # %%
-# print('test complete')
+rgb_input = tf.keras.Input(shape=(5, rsz[0], rsz[1], 3), name='rgb_input')
+x = tf.keras.layers.Flatten()
+x = Dense(128)
+x = LeakyReLU()
+x = Dense(128)
+x = LeakyReLU()
+x = Dense(128)
+x = LeakyReLU()
+x = tf.keras.layers.Dropout(0.5)
+x = Dense(1)
 # %%
 batch_size = 1
 rsz = (128, 128)
@@ -222,28 +220,55 @@ flow = flow_stream(flow_input)
 final_average = tf.keras.layers.average([rgb, flow])
 x = tf.keras.layers.Flatten()(final_average)
 final_output = Dense(2, activation='softmax', name='final_output')(x)
+# final_output = Dense(2, activation='sigmoid', name='final_output')(x)
 model = Model(
     inputs={"rgb_input": rgb_input, "flow_input": flow_input},
     outputs=final_output,
     name='my_model'
 )
-model.summary()
+# model.summary()
 
+
+# # %%
+# rgb_stream.shape
+# # %%
+# rgb.shape
+# # %%
+# final_average.shape
+# # %%
+# x.shape
+# # %%
+# final_output.shape
+# # %%
+# f = x_train[0]
+# dp = DataPrepDlib(segment_size=segment_size)
+# frames, flows = dp.prepVid(filepath=f)
+# sample = {'rgb_input': frames, 'flow_input': flows}
+# x = model(sample)
+# x.shape
+# %%
 
 # %%
-tf.keras.utils.plot_model(
-    model,
-    to_file='model.png',
-    show_shapes=True,
-    show_layer_names=True,
-)
+
+# %%
+# opt = tf.keras.optimizers.Adam()
+# model.compile(
+#     optimizer=opt,
+#     loss='categorical_crossentropy',
+#     metrics=['acc'])
+# model.fit(
+#     train_data,
+#     epochs=25,
+#     verbose=1,
+#     class_weight=class_weights
+# )
 
 
 # %%
 opt = tf.keras.optimizers.Adam()
 model.compile(
     optimizer=opt,
-    loss='categorical_crossentropy',
+    loss='binary_crossentropy',
     metrics=['acc'])
 model.fit(
     train_data,
@@ -261,41 +286,15 @@ model.evaluate(
 
 
 # %%
+from datetime import datetime
+dt = datetime.now().strftime('%Y%m%d_%H%M%S')
+dt
 
 
 # %%
-# DEBUGGING
-dataset = input_fn(filepath, batch_size=1)
-start = time.time()
-for i, x in enumerate(dataset):
-    print(i)
-    data_dict, label = x
-    for k, v in data_dict.items():
-        print(k, v.numpy().shape)
-    print(time.time() - start)
+savepath = f'/data/models/{dt}'
+os.makedirs(savepath, exist_ok=True)
+model.save(savepath)
 
 
 # %%
-filepath = 'data/train_sample_videos'
-segment_size = 5
-datapath = os.path.join(filepath, 'metadata.json')
-data = pd.read_json(os.path.join(datapath)).T
-files = [os.path.join(filepath, f) for f in data.index]
-labels = data.label.apply(lambda x: 0 if x == 'REAL' else 1)
-labels = to_categorical(labels, num_classes=2)
-for i, (f, label) in enumerate(zip(files, labels)):
-    try:
-        dp = DataPrep(segment_size=segment_size)
-        frames = dp.prepFullFrames(filepath=f)
-        flows = dp.getOpticalFlows()
-    except Exception as e:
-        print(i, f, label)
-        print(e)
-        break
-print('everything is working now')
-
-
-# %%
-f = 'data/train_sample_videos/adhsbajydo.mp4'
-dp = DataPrep(segment_size=segment_size)
-frames = dp.prepFullFrames(filepath=f)

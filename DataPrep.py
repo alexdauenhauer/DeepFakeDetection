@@ -40,7 +40,7 @@ class DataPrepCv2():
         # self.fpScaleFactor = 1.5
         # self.ffMinNeigbors = 2
         # self.fpMinNeighbors = 2
-        self.fd = get_frontal_face_detector()
+        # self.fd = get_frontal_face_detector()
         self.segment_size = segment_size
         self.frames = None
         self.flows = None

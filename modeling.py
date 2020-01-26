@@ -16,7 +16,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 from_generator = tf.data.Dataset.from_generator
 
-from DataPrep import DataPrepDlib
+from DataPrep import DataPrepDlib, DataPrepCv2
 
 
 # %%
@@ -47,12 +47,12 @@ x_train, x_test, y_train, y_test = train_test_split(
 class_weights = compute_class_weight('balanced', np.unique(y_train), y_train)
 for k, v in zip(np.unique(y_train), class_weights):
     print(k, v)
-# y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
-# y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
-# y_train = to_categorical(y_train, num_classes=2)
-# y_test = to_categorical(y_test, num_classes=2)
 y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
 y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
+y_train = to_categorical(y_train, num_classes=2)
+y_test = to_categorical(y_test, num_classes=2)
+# y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
+# y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
 print(len(x_train), len(y_train), len(x_test), len(y_test))
 
 
@@ -62,7 +62,9 @@ print(len(x_train), len(y_train), len(x_test), len(y_test))
 def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         for f, label in zip(files, labels):
-            dp = DataPrepDlib(segment_size=segment_size)
+            # dp = DataPrepDlib(segment_size=segment_size)
+            # frames, flows = dp.prepVid(filepath=f)
+            dp = DataPrepCv2(segment_size=segment_size)
             frames, flows = dp.prepVid(filepath=f)
             yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
@@ -85,21 +87,32 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
 
 
 # %%
-rgb_input = tf.keras.Input(shape=(5, rsz[0], rsz[1], 3), name='rgb_input')
-x = tf.keras.layers.Flatten()
-x = Dense(128)
-x = LeakyReLU()
-x = Dense(128)
-x = LeakyReLU()
-x = Dense(128)
-x = LeakyReLU()
-x = tf.keras.layers.Dropout(0.5)
-x = Dense(1)
+# rgb_input = tf.keras.Input(shape=(5, rsz[0], rsz[1], 3), name='rgb_input')
+# x = tf.keras.layers.Flatten()
+# x = Dense(128)
+# x = LeakyReLU()
+# x = Dense(128)
+# x = LeakyReLU()
+# x = Dense(128)
+# x = LeakyReLU()
+# x = tf.keras.layers.Dropout(0.5)
+# x = Dense(1)
 # %%
-batch_size = 1
-rsz = (128, 128)
-train_data = input_fn(x_train, y_train, batch_size=batch_size, rsz=rsz)
-test_data = input_fn(x_test, y_test, batch_size=batch_size, rsz=rsz)
+batch_size = 10
+segment_size = 10
+rsz = (512, 512)
+train_data = input_fn(
+    x_train,
+    y_train,
+    segment_size=segment_size,
+    batch_size=batch_size,
+    rsz=rsz)
+test_data = input_fn(
+    x_test,
+    y_test,
+    segment_size=segment_size,
+    batch_size=batch_size,
+    rsz=rsz)
 
 
 # %%

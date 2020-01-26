@@ -134,17 +134,17 @@ class DataPrepCv2():
 
     def prepVid(
             self,
-            frame_name=None,
+            filepath,
             start_frame=None,
             face_only=False,
             rsz=(256, 256)):
-        if not frame_name:
-            frame_name = choice(listdir(self.datapath))
-        vid = path.join(self.datapath, frame_name)
+        # if not filepath:
+        #     filepath = choice(listdir(self.datapath))
+        # vid = path.join(self.datapath, filepath)
         # print(vid)
-        start = time()
-        frames = self.getFrameSnippet(vid, start_frame=start_frame)
-        flows = self.getOpticalFlows(frames)
+        # start = time()
+        frames = self.getFrameSnippet(filepath, start_frame=start_frame)
+        flows = self.getOpticalFlows()
         rgb_rois = []
         flow_rois = []
         if face_only:
@@ -255,8 +255,8 @@ class DataPrepDlib():
             frame = cv2.equalizeHist(frame)
             faces = self.fd(frame, 0)
         if len(faces) < 1:
-#             frame = cv2.cvtColor(orig_frame, cv2.COLOR_BGR2GRAY)
-#             frame = cv2.equalizeHist(frame)
+            #             frame = cv2.cvtColor(orig_frame, cv2.COLOR_BGR2GRAY)
+            #             frame = cv2.equalizeHist(frame)
             faces = orig_frame
         return faces
 
@@ -280,18 +280,42 @@ class DataPrepDlib():
     def prepVid(self, filepath, start_frame=None, rsz=(128, 128)):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
-        rgb_rois = []
-        flow_rois = []
+        w, h = rsz
+        # rgb_rois = []
+        # flow_rois = []
+        rgb_rois = np.empty(self.segment_size, w, h, 3)
+        flow_rois = np.empty(self.segment_size - 1, w, h, 2)
         for i, frame in enumerate(self.frames):
             faces = self.getFaces(frame)
             rois = self.getFaceRois(frame, faces)
-            rgb_rois.append(rois)
+            # rgb_rois.append(rois)
+            rgb_rois[i] = rois
             if i == 0:
                 continue
             else:
                 flow = self.flows[i - 1]
                 rois = self.getFaceRois(flow, faces)
-                flow_rois.append(rois)
-        rgb_rois = np.stack(rgb_rois)
-        flow_rois = np.stack(flow_rois)
+                # flow_rois.append(rois)
+                flow_rois[i - 1] = rois
+        # rgb_rois = np.stack(rgb_rois)
+        # flow_rois = np.stack(flow_rois)
+        return rgb_rois, flow_rois
+
+    def prepFullFrames(self, filepath, start_frame=None, rsz=(128, 128)):
+        self.getFrameSnippet(filepath, start_frame)
+        self.getOpticalFlows()
+        w, h = rsz
+        rgb_rois = np.empty(self.segment_size, w, h, 3)
+        flow_rois = np.empty(self.segment_size - 1, w, h, 2)
+        for i, frame in enumerate(self.frames):
+            rois = self.resize(frame)
+            rgb_rois[i] = rois
+            if i == 0:
+                continue
+            else:
+                flow = self.flows[i - 1]
+                rois = self.resize(flow)
+                flow_rois[i - 1] = rois
+        # rgb_rois = np.stack(rgb_rois)
+        # flow_rois = np.stack(flow_rois)
         return rgb_rois, flow_rois

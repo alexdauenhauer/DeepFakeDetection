@@ -233,37 +233,27 @@ class DataPrepDlib():
                  self.frames.shape[1],
                  self.frames.shape[2],
                  2))
-            # prvs = cv2.cvtColor(
-            #     self.frames[0].astype(np.uint8), cv2.COLOR_BGR2GRAY)
-            prvs = cv2.cuda.cvtColor(
+            prvs = cv2.cvtColor(
                 self.frames[0].astype(np.uint8), cv2.COLOR_BGR2GRAY)
             for i in range(1, int(self.frames.shape[0])):
-                # frame = cv2.cvtColor(
-                #     self.frames[i].astype(np.uint8), cv2.COLOR_BGR2GRAY)
-                frame = cv2.cuda.cvtColor(
+                frame = cv2.cvtColor(
                     self.frames[i].astype(np.uint8), cv2.COLOR_BGR2GRAY)
-                # self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
-                #     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
-                self.flows[i - 1] = cv2.cuda.calcOpticalFlowFarneback(
+                self.flows[i - 1] = cv2.calcOpticalFlowFarneback(
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
     def resize(self, frame):
         # TODO: will want to test different sizes here as a hyperparameter
         height, width = self.rsz
-        # return cv2.resize(frame, (height, width))
-        return cv2.cuda.resize(frame, (height, width))
+        return cv2.resize(frame, (height, width))
 
     def getFaces(self, frame, grayscale=True):
         orig_frame = frame
-        # if grayscale:
-        #     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if grayscale:
-            frame = cv2.cuda.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.fd(frame, 0)
         if len(faces) < 1:
-            # frame = cv2.equalizeHist(frame)
-            frame = cv2.cuda.equalizeHist(frame)
+            frame = cv2.equalizeHist(frame)
             faces = self.fd(frame, 0)
         if len(faces) < 1:
             faces = orig_frame
@@ -290,25 +280,19 @@ class DataPrepDlib():
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
         w, h = self.rsz
-        # rgb_rois = []
-        # flow_rois = []
         rgb_rois = np.empty((self.segment_size, w, h, 3), dtype=np.int8)
         flow_rois = np.empty(
             (self.segment_size - 1, w, h, 2), dtype=np.float32)
         for i, frame in enumerate(self.frames):
             faces = self.getFaces(frame)
             rois = self.getFaceRois(frame, faces)
-            # rgb_rois.append(rois)
             rgb_rois[i] = rois
             if i == 0:
                 continue
             else:
                 flow = self.flows[i - 1]
                 rois = self.getFaceRois(flow, faces)
-                # flow_rois.append(rois)
                 flow_rois[i - 1] = rois
-        # rgb_rois = np.stack(rgb_rois)
-        # flow_rois = np.stack(flow_rois)
         return rgb_rois, flow_rois
 
     def prepFullFrames(self, filepath, start_frame=None):
@@ -327,6 +311,4 @@ class DataPrepDlib():
                 flow = self.flows[i - 1]
                 rois = self.resize(flow)
                 flow_rois[i - 1] = rois
-        # rgb_rois = np.stack(rgb_rois)
-        # flow_rois = np.stack(flow_rois)
         return rgb_rois, flow_rois

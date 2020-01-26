@@ -201,11 +201,12 @@ class DataPrepCv2():
 
 class DataPrepDlib():
 
-    def __init__(self, segment_size=5):
+    def __init__(self, segment_size=5, rsz=(128, 128)):
         self.fd = get_frontal_face_detector()
         self.segment_size = segment_size
         self.frames = None
         self.flows = None
+        self.rsz = rsz
 
     def getFrameSnippet(self, filepath, start_frame=None):
         cap = cv2.VideoCapture(filepath)
@@ -241,9 +242,9 @@ class DataPrepDlib():
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
-    @staticmethod
-    def resize(frame, height=128, width=128):
+    def resize(self, frame):
         # TODO: will want to test different sizes here as a hyperparameter
+        height, width = self.rsz
         return cv2.resize(frame, (height, width))
 
     def getFaces(self, frame, grayscale=True):
@@ -255,8 +256,6 @@ class DataPrepDlib():
             frame = cv2.equalizeHist(frame)
             faces = self.fd(frame, 0)
         if len(faces) < 1:
-            #             frame = cv2.cvtColor(orig_frame, cv2.COLOR_BGR2GRAY)
-            #             frame = cv2.equalizeHist(frame)
             faces = orig_frame
         return faces
 
@@ -277,10 +276,10 @@ class DataPrepDlib():
         face_rois = self.resize(face_rois)
         return face_rois
 
-    def prepVid(self, filepath, start_frame=None, rsz=(128, 128)):
+    def prepVid(self, filepath, start_frame=None):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
-        w, h = rsz
+        w, h = self.rsz
         # rgb_rois = []
         # flow_rois = []
         rgb_rois = np.empty((self.segment_size, w, h, 3), dtype=np.int8)
@@ -302,10 +301,10 @@ class DataPrepDlib():
         # flow_rois = np.stack(flow_rois)
         return rgb_rois, flow_rois
 
-    def prepFullFrames(self, filepath, start_frame=None, rsz=(128, 128)):
+    def prepFullFrames(self, filepath, start_frame=None):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
-        w, h = rsz
+        w, h = self.rsz
         rgb_rois = np.empty((self.segment_size, w, h, 3), dtype=np.int8)
         flow_rois = np.empty(
             (self.segment_size - 1, w, h, 2), dtype=np.float32)

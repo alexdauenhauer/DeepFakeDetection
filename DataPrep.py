@@ -283,8 +283,9 @@ class DataPrepDlib():
         w, h = rsz
         # rgb_rois = []
         # flow_rois = []
-        rgb_rois = np.empty(self.segment_size, w, h, 3)
-        flow_rois = np.empty(self.segment_size - 1, w, h, 2)
+        rgb_rois = np.empty((self.segment_size, w, h, 3), dtype=np.int8)
+        flow_rois = np.empty(
+            (self.segment_size - 1, w, h, 2), dtype=np.float32)
         for i, frame in enumerate(self.frames):
             faces = self.getFaces(frame)
             rois = self.getFaceRois(frame, faces)
@@ -305,8 +306,9 @@ class DataPrepDlib():
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
         w, h = rsz
-        rgb_rois = np.empty(self.segment_size, w, h, 3)
-        flow_rois = np.empty(self.segment_size - 1, w, h, 2)
+        rgb_rois = np.empty((self.segment_size, w, h, 3), dtype=np.int8)
+        flow_rois = np.empty(
+            (self.segment_size - 1, w, h, 2), dtype=np.float32)
         for i, frame in enumerate(self.frames):
             rois = self.resize(frame)
             rgb_rois[i] = rois

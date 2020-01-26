@@ -18,6 +18,7 @@ pd.options.display.max_rows = 1000
 # %%
 datapath = 'data/train_sample_videos'
 
+
 metadata = pd.read_json(os.path.join(datapath, 'metadata.json')).T
 metadata.head()
 # %%
@@ -233,12 +234,12 @@ metadata.shape
 
 # %%
 fd = dlib.get_frontal_face_detector()
-idx = np.random.choice(metadata['Unnamed: 0'].values, 40, replace=False)
+# idx = np.random.choice(metadata['Unnamed: 0'].values, 40, replace=False)
 # fcv = []
 fdl = []
 # sf = 1.2
 # mn = 7
-for i in tqdm(metadata['Unnamed: 0'].values):
+for i in tqdm(metadata['Unnamed: 0.1'].values):
     # for i in tqdm(idx):
     vid = os.path.join(datapath, i)
     frames = getFrameSnippet(vid, 0)
@@ -252,10 +253,10 @@ for i in tqdm(metadata['Unnamed: 0'].values):
     # print(f"cv2 runtime: {time.time() - start}")
     # print(f'cv2 number of faces {len(faces1)}')
     # start = time.time()
-    faces2 = fd(frame, 1)
+    faces2 = fd(frame, 0)
     if len(faces2) < 1:
         frame = cv2.equalizeHist(frame)
-        faces2 = fd(frame, 1)
+        faces2 = fd(frame, 0)
     fdl.append(len(faces2))
     # print(f"dlib runtime: {time.time() - start}")
     # print(f'dlib number of faces {len(faces2)}')
@@ -270,7 +271,19 @@ for i in tqdm(metadata['Unnamed: 0'].values):
 # metadata['dlib_faces'] = fdl
 
 # %%
-# metadata = pd.read_csv('metadata.csv')
+metadata = pd.read_csv('metadata.csv')
+metadata.head()
+# %%
+apt-get install --no-install-recommends \
+    libcudnn7=7.6.4.38-1+cuda10.1  \
+    libcudnn7-dev=7.6.4.38-1+cuda10.1
+wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
+apt install ./nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
+apt-get update
+apt-get install build-essential cmake
+apt-get install libopenblas-dev liblapack-dev
+
+# %%
 metadata['dlib_new3'] = fdl
 # metadata
 # %%

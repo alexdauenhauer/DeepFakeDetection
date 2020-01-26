@@ -250,10 +250,10 @@ class DataPrepDlib():
         orig_frame = frame
         if grayscale:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = self.fd(frame, 1)
+        faces = self.fd(frame, 0)
         if len(faces) < 1:
             frame = cv2.equalizeHist(frame)
-            faces = self.fd(frame, 1)
+            faces = self.fd(frame, 0)
         if len(faces) < 1:
 #             frame = cv2.cvtColor(orig_frame, cv2.COLOR_BGR2GRAY)
 #             frame = cv2.equalizeHist(frame)

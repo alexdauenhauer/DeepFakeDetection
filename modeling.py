@@ -48,7 +48,7 @@ data = pd.read_json(datapath).T
 files = [os.path.join(filepath, f) for f in data.index]
 labels = data.label.values
 x_train, x_test, y_train, y_test = train_test_split(
-    files, labels, test_size=0.2)
+    files, labels, test_size=0.1)
 class_weights = compute_class_weight('balanced', np.unique(y_train), y_train)
 for k, v in zip(np.unique(y_train), class_weights):
     print(k, v)

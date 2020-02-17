@@ -10,16 +10,15 @@ import pandas as pd
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
-from tensorflow.keras.layers import (BatchNormalization, Conv3D, ConvLSTM2D,
-                                     Dense, Input, LeakyReLU)
+from tensorflow.keras import layers
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 
-# ROOT_DIR = dirname(abspath(__file__))
-# if ROOT_DIR not in sys.path:
-#     sys.path.append(ROOT_DIR)
+ROOT_DIR = dirname(abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.append(ROOT_DIR)
 
-# from DataPrep import DataPrepDlib
+from DataPrep import DataPrepDlib
 
 from_generator = tf.data.Dataset.from_generator
 
@@ -213,8 +212,10 @@ rgb_input = tf.keras.Input(
 flow_input = tf.keras.Input(
     shape=(segment_size - 1, rsz[0], rsz[1], 2),
     name='flow_input')
+
 # %%
-x = Conv3D(
+# block 1
+x = layers.Conv3D(
     filters=8,
     kernel_size=3,
     strides=(1, 1, 1),
@@ -222,7 +223,7 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(rgb_input)
-x = Conv3D(
+x = layers.Conv3D(
     filters=8,
     kernel_size=4,
     strides=(1, 1, 1),
@@ -230,13 +231,13 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(x)
-block1_output = tf.keras.layers.MaxPool3D(
+block1_output = layers.MaxPool3D(
     pool_size=(2, 2, 2),
     strides=(2, 2, 2),
     padding='same'
-)
-
-x = Conv3D(
+)(x)
+# block 2
+x = layers.Conv3D(
     filters=8,
     kernel_size=3,
     strides=(1, 1, 1),
@@ -244,7 +245,7 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(block1_output)
-x = Conv3D(
+x = layers.Conv3D(
     filters=8,
     kernel_size=4,
     strides=(1, 1, 1),
@@ -252,9 +253,9 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(x)
-block2_output = tf.keras.layers.add([x, block1_output])
-
-x = Conv3D(
+block2_output = layers.add([x, block1_output])
+# block 3
+x = layers.Conv3D(
     filters=8,
     kernel_size=3,
     strides=(1, 1, 1),
@@ -262,7 +263,7 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(block2_output)
-x = Conv3D(
+x = layers.Conv3D(
     filters=8,
     kernel_size=4,
     strides=(1, 1, 1),
@@ -270,9 +271,9 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(x)
-block3_output = tf.keras.layers.add([x, block2_output])
+block3_output = layers.add([x, block2_output])
 
-x = Conv3D(
+x = layers.Conv3D(
     filters=8,
     kernel_size=3,
     strides=(1, 1, 1),
@@ -280,11 +281,84 @@ x = Conv3D(
     data_format='channels_last',
     activation='relu',
 )(block3_output)
-x = tf.keras.layers.GlobalAveragePooling()(x)
-x = Dense(64, activation='relu')(x)
-x = tf.keras.layers.Dropout(0.5)(x)
-outputs = Dense(2, activation='softmax')(x)
+x = layers.GlobalAveragePooling3D()(x)
+x = layers.Dense(64, activation='relu')(x)
+x = layers.Dropout(0.5)(x)
+rgb_outputs = layers.Dense(2, activation='softmax')(x)
 
-model = Model(inputs=rgb_input, outputs=outputs)
+rgb_model = Model(inputs=rgb_input, outputs=rgb_outputs)
+rgb_model.summary()
+# %%
+x = layers.ConvLSTM2D(
+    filters=8,
+    kernel_size=3,
+    strides=1,
+    padding='same',
+    data_format='channels_last',
+    return_sequences=True,
+    dropout=0.5
+)(flow_input)
+x = layers.BatchNormalization()(x)
+x = layers.ConvLSTM2D(
+    filters=8,
+    kernel_size=3,
+    strides=1,
+    padding='same',
+    data_format='channels_last',
+    return_sequences=True,
+    dropout=0.5
+)(x)
+x = layers.BatchNormalization()(x)
+x = layers.ConvLSTM2D(
+    filters=8,
+    kernel_size=3,
+    strides=1,
+    padding='same',
+    data_format='channels_last',
+    return_sequences=False,
+    dropout=0.5
+)(x)
+x = layers.BatchNormalization()(x)
+x = layers.Flatten()(x)
+x = layers.Dense(128, activation='relu')(x)
+x = layers.Dense(128, activation='relu')(x)
+x = layers.Dense(128, activation='relu')(x)
+x = layers.Dropout(0.5)(x)
+flow_output = layers.Dense(2)(x)
+flow_model = Model(inputs=flow_input, outputs=flow_output)
+flow_model.summary()
+# %%
+final_average = layers.average([rgb_outputs, flow_output])
+x = layers.Flatten()(final_average)
+final_output = layers.Dense(2, activation='softmax', name='final_output')(x)
+model = Model(
+    inputs={"rgb_input": rgb_input, "flow_input": flow_input},
+    outputs=final_output,
+    name='my_model'
+)
 model.summary()
 # %%
+tf.keras.utils.plot_model(
+    model,
+    to_file='model.png',
+    show_shapes=True,
+    show_layer_names=True
+)
+# %%
+opt = tf.keras.optimizers.Adam()
+model.compile(
+    optimizer=opt,
+    loss='categorical_crossentropy',
+    metrics=['acc'])
+model.fit(
+    x=train_data,
+    validation_data=test_data,
+    epochs=1,
+    verbose=1,
+    class_weight=class_weights
+)
+# %%
+model.evaluate(
+    test_data,
+    #     class_weight=class_weights
+)

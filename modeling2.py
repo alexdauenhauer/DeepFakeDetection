@@ -4,25 +4,23 @@ import pickle
 import sys
 import time
 from os.path import abspath, dirname
+from random import choice
+from time import time
 
+import cv2
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from dlib import get_frontal_face_detector
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
+# pylint: disable=import-error
 from tensorflow.keras import layers
 from tensorflow.keras.models import Model
 from tensorflow.keras.utils import to_categorical
 
-ROOT_DIR = dirname(abspath(__file__))
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
-
-from DataPrep import DataPrepDlib
-
 from_generator = tf.data.Dataset.from_generator
-
-# %%
+np.random.seed(666)
 
 
 class DataPrep():
@@ -40,7 +38,7 @@ class DataPrep():
         frameWidth = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         if not start_frame:
-            start_frame = choice(range(int(frameCount)))
+            start_frame = np.random.choice(range(int(frameCount)), size=1)[0]
         if frameCount - start_frame < self.segment_size:
             start_frame = 0
         self.frames = np.empty(
@@ -145,9 +143,8 @@ class DataPrep():
 def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         for f, label in zip(files, labels):
-            dp = DataPrepDlib(segment_size=segment_size, rsz=rsz)
+            dp = DataPrep(segment_size=segment_size, rsz=rsz)
             frames, flows = dp.prepVid(filepath=f)
-            # frames, flows = dp.prepFullFrames(filepath=f)
             yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
         dataGenerator,
@@ -169,196 +166,202 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
 
 
 # %%
-filepath = 'data/train_sample_videos'
-segment_size = 5
-datapath = os.path.join(filepath, 'metadata.json')
-data = pd.read_json(datapath).T
-files = [os.path.join(filepath, f) for f in data.index]
-labels = data.label.values
-x_train, x_test, y_train, y_test = train_test_split(
-    files, labels, test_size=0.1)
-class_weights = compute_class_weight('balanced', np.unique(y_train), y_train)
-for k, v in zip(np.unique(y_train), class_weights):
-    print(k, v)
-y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
-y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
-y_train = to_categorical(y_train, num_classes=2)
-y_test = to_categorical(y_test, num_classes=2)
-# y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
-# y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
-print(len(x_train), len(y_train), len(x_test), len(y_test))
+def main():
+    filepath = 'data/train_sample_videos'
+    segment_size = 5
+    datapath = os.path.join(filepath, 'metadata.json')
+    data = pd.read_json(datapath).T
+    files = [os.path.join(filepath, f) for f in data.index]
+    labels = data.label.values
+    x_train, x_test, y_train, y_test = train_test_split(
+        files, labels, test_size=0.1)
+    class_weights = compute_class_weight(
+        'balanced', np.unique(y_train), y_train)
+    for k, v in zip(np.unique(y_train), class_weights):
+        print(k, v)
+    y_train = list(map(lambda x: 0 if x == 'REAL' else 1, y_train))
+    y_test = list(map(lambda x: 0 if x == 'REAL' else 1, y_test))
+    y_train = to_categorical(y_train, num_classes=2)
+    y_test = to_categorical(y_test, num_classes=2)
+    print(len(x_train), len(y_train), len(x_test), len(y_test))
 
-# %%
-batch_size = 4
-segment_size = 5
-rsz = (128, 128)
-train_data = input_fn(
-    x_train,
-    y_train,
-    segment_size=segment_size,
-    batch_size=batch_size,
-    rsz=rsz)
-test_data = input_fn(
-    x_test,
-    y_test,
-    segment_size=segment_size,
-    batch_size=batch_size,
-    rsz=rsz)
+    batch_size = 4
+    segment_size = 10
+    rsz = (128, 128)
+    train_data = input_fn(
+        x_train,
+        y_train,
+        segment_size=segment_size,
+        batch_size=batch_size,
+        rsz=rsz)
+    test_data = input_fn(
+        x_test,
+        y_test,
+        segment_size=segment_size,
+        batch_size=batch_size,
+        rsz=rsz)
+    rgb_input = tf.keras.Input(
+        shape=(segment_size, rsz[0], rsz[1], 3),
+        name='rgb_input')
+    flow_input = tf.keras.Input(
+        shape=(segment_size - 1, rsz[0], rsz[1], 2),
+        name='flow_input')
 
-# %%
-rgb_input = tf.keras.Input(
-    shape=(segment_size, rsz[0], rsz[1], 3),
-    name='rgb_input')
-flow_input = tf.keras.Input(
-    shape=(segment_size - 1, rsz[0], rsz[1], 2),
-    name='flow_input')
+    # TODO: make OO
+    # RGB MODEL
+    # block 1
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=3,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(rgb_input)
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=4,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(x)
+    block1_output = layers.MaxPool3D(
+        pool_size=(2, 2, 2),
+        strides=(2, 2, 2),
+        padding='same'
+    )(x)
+    # block 2
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=3,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(block1_output)
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=4,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(x)
+    block2_output = layers.add([x, block1_output])
+    # block 3
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=3,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(block2_output)
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=4,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(x)
+    block3_output = layers.add([x, block2_output])
 
-# %%
-# block 1
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=3,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(rgb_input)
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=4,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(x)
-block1_output = layers.MaxPool3D(
-    pool_size=(2, 2, 2),
-    strides=(2, 2, 2),
-    padding='same'
-)(x)
-# block 2
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=3,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(block1_output)
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=4,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(x)
-block2_output = layers.add([x, block1_output])
-# block 3
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=3,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(block2_output)
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=4,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(x)
-block3_output = layers.add([x, block2_output])
+    x = layers.Conv3D(
+        filters=8,
+        kernel_size=3,
+        strides=(1, 1, 1),
+        padding='same',
+        data_format='channels_last',
+        activation='relu',
+    )(block3_output)
+    x = layers.GlobalAveragePooling3D()(x)
+    x = layers.Dense(64, activation='relu')(x)
+    x = layers.Dropout(0.5)(x)
+    rgb_outputs = layers.Dense(2, activation='softmax')(x)
 
-x = layers.Conv3D(
-    filters=8,
-    kernel_size=3,
-    strides=(1, 1, 1),
-    padding='same',
-    data_format='channels_last',
-    activation='relu',
-)(block3_output)
-x = layers.GlobalAveragePooling3D()(x)
-x = layers.Dense(64, activation='relu')(x)
-x = layers.Dropout(0.5)(x)
-rgb_outputs = layers.Dense(2, activation='softmax')(x)
+    rgb_model = Model(inputs=rgb_input, outputs=rgb_outputs)
+    rgb_model.summary()
 
-rgb_model = Model(inputs=rgb_input, outputs=rgb_outputs)
-rgb_model.summary()
-# %%
-x = layers.ConvLSTM2D(
-    filters=8,
-    kernel_size=3,
-    strides=1,
-    padding='same',
-    data_format='channels_last',
-    return_sequences=True,
-    dropout=0.5
-)(flow_input)
-x = layers.BatchNormalization()(x)
-x = layers.ConvLSTM2D(
-    filters=8,
-    kernel_size=3,
-    strides=1,
-    padding='same',
-    data_format='channels_last',
-    return_sequences=True,
-    dropout=0.5
-)(x)
-x = layers.BatchNormalization()(x)
-x = layers.ConvLSTM2D(
-    filters=8,
-    kernel_size=3,
-    strides=1,
-    padding='same',
-    data_format='channels_last',
-    return_sequences=False,
-    dropout=0.5
-)(x)
-x = layers.BatchNormalization()(x)
-x = layers.Flatten()(x)
-x = layers.Dense(128, activation='relu')(x)
-x = layers.Dense(128, activation='relu')(x)
-x = layers.Dense(128, activation='relu')(x)
-x = layers.Dropout(0.5)(x)
-flow_output = layers.Dense(2)(x)
-flow_model = Model(inputs=flow_input, outputs=flow_output)
-flow_model.summary()
-# %%
-final_average = layers.average([rgb_outputs, flow_output])
-x = layers.Flatten()(final_average)
-final_output = layers.Dense(2, activation='softmax', name='final_output')(x)
-model = Model(
-    inputs={"rgb_input": rgb_input, "flow_input": flow_input},
-    outputs=final_output,
-    name='my_model'
-)
-model.summary()
-# %%
-tf.keras.utils.plot_model(
-    model,
-    to_file='model.png',
-    show_shapes=True,
-    show_layer_names=True
-)
-# %%
-opt = tf.keras.optimizers.Adam()
-model.compile(
-    optimizer=opt,
-    loss='categorical_crossentropy',
-    metrics=['acc'])
-model.fit(
-    x=train_data,
-    validation_data=test_data,
-    epochs=1,
-    verbose=1,
-    class_weight=class_weights
-)
-# %%
-model.evaluate(
-    test_data,
-    #     class_weight=class_weights
-)
+    # FLOW MODEL
+    x = layers.ConvLSTM2D(
+        filters=8,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        data_format='channels_last',
+        return_sequences=True,
+        dropout=0.5
+    )(flow_input)
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=8,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        data_format='channels_last',
+        return_sequences=True,
+        dropout=0.5
+    )(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ConvLSTM2D(
+        filters=8,
+        kernel_size=3,
+        strides=1,
+        padding='same',
+        data_format='channels_last',
+        return_sequences=False,
+        dropout=0.5
+    )(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(128, activation='relu')(x)
+    x = layers.Dense(128, activation='relu')(x)
+    x = layers.Dense(128, activation='relu')(x)
+    x = layers.Dropout(0.5)(x)
+    flow_output = layers.Dense(2)(x)
+    flow_model = Model(inputs=flow_input, outputs=flow_output)
+    flow_model.summary()
+
+    # FINAL MODEL
+    final_average = layers.average([rgb_outputs, flow_output])
+    x = layers.Flatten()(final_average)
+    final_output = layers.Dense(
+        2, activation='softmax', name='final_output')(x)
+    model = Model(
+        inputs={"rgb_input": rgb_input, "flow_input": flow_input},
+        outputs=final_output,
+        name='my_model'
+    )
+    model.summary()
+
+    # tf.keras.utils.plot_model(
+    #     model,
+    #     to_file='model.png',
+    #     show_shapes=True,
+    #     show_layer_names=True
+    # )
+
+    # TRAIN
+    opt = tf.keras.optimizers.Adam()
+    model.compile(
+        optimizer=opt,
+        loss='categorical_crossentropy',
+        metrics=['acc'])
+    model.fit(
+        x=train_data,
+        validation_data=test_data,
+        epochs=5,
+        verbose=1,
+        class_weight=class_weights
+    )
+
+    # EVAL
+    model.evaluate(
+        test_data
+    )
+
+
+if __name__ == "__main__":
+    main()

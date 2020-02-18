@@ -161,7 +161,7 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
             },
             (2,))
     )
-    dataset = dataset.batch(batch_size)
+    dataset = dataset.batch(batch_size).repeat()
     return dataset
 
 
@@ -171,10 +171,12 @@ def main():
     segment_size = 5
     datapath = os.path.join(filepath, 'metadata.json')
     data = pd.read_json(datapath).T
-    files = [os.path.join(filepath, f) for f in data.index]
-    labels = data.label.values
+    # files = [os.path.join(filepath, f) for f in data.index]
+    # labels = data.label.values
+    files = [os.path.join(filepath, f) for f in data.index][:40]
+    labels = data.label.values[:40]
     x_train, x_test, y_train, y_test = train_test_split(
-        files, labels, test_size=0.1)
+        files, labels, test_size=0.2)
     class_weights = compute_class_weight(
         'balanced', np.unique(y_train), y_train)
     for k, v in zip(np.unique(y_train), class_weights):
@@ -186,7 +188,7 @@ def main():
     print(len(x_train), len(y_train), len(x_test), len(y_test))
 
     batch_size = 4
-    segment_size = 10
+    segment_size = 2
     rsz = (128, 128)
     train_data = input_fn(
         x_train,
@@ -345,6 +347,12 @@ def main():
 
     # TRAIN
     opt = tf.keras.optimizers.Adam()
+    save_path = 'data/model_checkpoints/ckpt'
+    ckpt = tf.keras.callbacks.ModelCheckpoint(
+        filepath=save_path,
+        save_best_only=False,
+        save_weights_only=True
+    )
     model.compile(
         optimizer=opt,
         loss='categorical_crossentropy',
@@ -354,14 +362,20 @@ def main():
         validation_data=test_data,
         epochs=5,
         verbose=1,
-        class_weight=class_weights
+        class_weight=class_weights,
+        steps_per_epoch=len(x_train) // batch_size,
+        validation_steps=len(x_test) // batch_size,
+        callbacks=[ckpt]
     )
 
     # EVAL
-    model.evaluate(
-        test_data
-    )
+    print('\n\n---------------------------------------------------------')
+    print('evaluating model')
+    model.evaluate(test_data)
 
 
 if __name__ == "__main__":
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
     main()

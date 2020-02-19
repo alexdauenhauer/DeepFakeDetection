@@ -214,10 +214,10 @@ def main():
     filepath = 'data/train_sample_videos'
     datapath = os.path.join(filepath, 'metadata.json')
     data = pd.read_json(datapath).T
-    # files = [os.path.join(filepath, f) for f in data.index]
-    # labels = data.label.values
-    files = [os.path.join(filepath, f) for f in data.index][:20]
-    labels = data.label.values[:20]
+    files = [os.path.join(filepath, f) for f in data.index]
+    labels = data.label.values
+    # files = [os.path.join(filepath, f) for f in data.index][:20]
+    # labels = data.label.values[:20]
     x_train, x_test, y_train, y_test = train_test_split(
         files, labels, test_size=0.1)
     class_weights = compute_class_weight(
@@ -232,8 +232,8 @@ def main():
 
     # validation data
     val_path = 'data/test_videos'
-    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
-    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
+    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
+    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
     print('number of validation files', len(val_files))
 
     # generate datasets

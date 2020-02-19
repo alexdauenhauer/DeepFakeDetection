@@ -4,6 +4,7 @@ import pickle
 import sys
 import time
 from os.path import abspath, dirname
+from datetime import datetime
 
 import cv2
 import numpy as np
@@ -184,7 +185,7 @@ def main():
     files = [os.path.join(filepath, f) for f in data.index][:20]
     labels = data.label.values[:20]
     x_train, x_test, y_train, y_test = train_test_split(
-        files, labels, test_size=0.2)
+        files, labels, test_size=0.1)
     class_weights = compute_class_weight(
         'balanced', np.unique(y_train), y_train)
     for k, v in zip(np.unique(y_train), class_weights):
@@ -198,6 +199,7 @@ def main():
     # validation data
     val_path = 'data/test_videos'
     val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
+    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
     print('number of validation files', len(val_files))
 
     # generate datasets
@@ -365,8 +367,9 @@ def main():
     # )
 
     # TRAIN
+    dt = datetime.now().strftime('%Y%m%d_%H%M%S')
     opt = tf.keras.optimizers.Adam()
-    save_path = 'data/model_checkpoints/ckpt'
+    save_path = f'data/model_checkpoints/ckpt.{dt}'
     ckpt = tf.keras.callbacks.ModelCheckpoint(
         filepath=save_path,
         save_best_only=False,
@@ -391,11 +394,17 @@ def main():
     print('\n\n---------------------------------------------------------')
     print('predicting on validation data')
     start = time.time()
-    preds = model.predict(val_data)
+    preds = model.predict(
+        val_data,
+        verbose=1,
+        steps=len(val_files) // batch_size
+    )
     print('prediction time: ', time.time() - start)
     preds = np.argmax(preds, axis=1)
-    df = pd.DataFrame([val_files, preds], columns=['filename', 'label'])
-    df.to_csv('data/submission.csv')
+    df = pd.DataFrame(columns=['filename', 'label'])
+    df.filename = [v.split('/')[-1] for v in val_files]
+    df.label = preds
+    df.to_csv(f'data/submission_{dt}.csv', index=False)
 
 
 if __name__ == "__main__":

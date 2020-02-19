@@ -4,8 +4,6 @@ import pickle
 import sys
 import time
 from os.path import abspath, dirname
-from random import choice
-from time import time
 
 import cv2
 import numpy as np
@@ -140,12 +138,19 @@ class DataPrep():
 
 # %%
 
-def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
+def input_fn(files, labels=None, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
-        for f, label in zip(files, labels):
-            dp = DataPrep(segment_size=segment_size, rsz=rsz)
-            frames, flows = dp.prepVid(filepath=f)
-            yield {'rgb_input': frames, 'flow_input': flows}, label
+        if labels is not None:
+            for f, label in zip(files, labels):
+                dp = DataPrep(segment_size=segment_size, rsz=rsz)
+                frames, flows = dp.prepVid(filepath=f)
+                yield {'rgb_input': frames, 'flow_input': flows}, label
+        else:
+            for f in files:
+                dp = DataPrep(segment_size=segment_size, rsz=rsz)
+                frames, flows = dp.prepVid(filepath=f)
+                label = np.array([0, 0])
+                yield {'rgb_input': frames, 'flow_input': flows}, label
     dataset = from_generator(
         dataGenerator,
         output_types=(
@@ -161,20 +166,23 @@ def input_fn(files, labels, segment_size=5, batch_size=1, rsz=(128, 128)):
             },
             (2,))
     )
-    dataset = dataset.batch(batch_size).repeat()
+    dataset = dataset.batch(batch_size)
     return dataset
 
 
+# def predict(model, test)
 # %%
+
+
 def main():
+    # grab training data
     filepath = 'data/train_sample_videos'
-    segment_size = 5
     datapath = os.path.join(filepath, 'metadata.json')
     data = pd.read_json(datapath).T
     # files = [os.path.join(filepath, f) for f in data.index]
     # labels = data.label.values
-    files = [os.path.join(filepath, f) for f in data.index][:40]
-    labels = data.label.values[:40]
+    files = [os.path.join(filepath, f) for f in data.index][:20]
+    labels = data.label.values[:20]
     x_train, x_test, y_train, y_test = train_test_split(
         files, labels, test_size=0.2)
     class_weights = compute_class_weight(
@@ -187,6 +195,12 @@ def main():
     y_test = to_categorical(y_test, num_classes=2)
     print(len(x_train), len(y_train), len(x_test), len(y_test))
 
+    # validation data
+    val_path = 'data/test_videos'
+    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
+    print('number of validation files', len(val_files))
+
+    # generate datasets
     batch_size = 4
     segment_size = 2
     rsz = (128, 128)
@@ -199,6 +213,11 @@ def main():
     test_data = input_fn(
         x_test,
         y_test,
+        segment_size=segment_size,
+        batch_size=batch_size,
+        rsz=rsz)
+    val_data = input_fn(
+        files=val_files,
         segment_size=segment_size,
         batch_size=batch_size,
         rsz=rsz)
@@ -358,9 +377,9 @@ def main():
         loss='categorical_crossentropy',
         metrics=['acc'])
     model.fit(
-        x=train_data,
-        validation_data=test_data,
-        epochs=5,
+        x=train_data.repeat(),
+        validation_data=test_data.repeat(),
+        epochs=1,
         verbose=1,
         class_weight=class_weights,
         steps_per_epoch=len(x_train) // batch_size,
@@ -370,8 +389,13 @@ def main():
 
     # EVAL
     print('\n\n---------------------------------------------------------')
-    print('evaluating model')
-    model.evaluate(test_data)
+    print('predicting on validation data')
+    start = time.time()
+    preds = model.predict(val_data)
+    print('prediction time: ', time.time() - start)
+    preds = np.argmax(preds, axis=1)
+    df = pd.DataFrame([val_files, preds], columns=['filename', 'label'])
+    df.to_csv('data/submission.csv')
 
 
 if __name__ == "__main__":

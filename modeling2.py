@@ -1,4 +1,5 @@
 # %%
+import argparse
 import os
 import pickle
 import sys
@@ -173,9 +174,42 @@ def input_fn(files, labels=None, segment_size=5, batch_size=1, rsz=(128, 128)):
 
 # def predict(model, test)
 # %%
+def parseArgs(arg_list=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--epochs',
+        default=10,
+        type=int,
+        help='number of epochs to train'
+    )
+    parser.add_argument(
+        '--batch_size',
+        default=4,
+        type=int,
+        help='batch size'
+    )
+    parser.add_argument(
+        '--segment_size',
+        default=10,
+        type=int,
+        help='number of frames to slice from each video'
+    )
+    parser.add_argument(
+        '--save_checkpoints',
+        default=False,
+        action='store_true',
+        help='whether or not to save checkpoints at each epoch'
+    )
+    if arg_list is not None:
+        args = parser.parse_args(arg_list)
+    else:
+        args = parser.parse_args()
+    return args
 
 
 def main():
+    arg_list = None
+    args = parseArgs(arg_list)
     # grab training data
     filepath = 'data/train_sample_videos'
     datapath = os.path.join(filepath, 'metadata.json')
@@ -198,13 +232,13 @@ def main():
 
     # validation data
     val_path = 'data/test_videos'
-    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
-    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
+    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
+    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
     print('number of validation files', len(val_files))
 
     # generate datasets
-    batch_size = 4
-    segment_size = 2
+    batch_size = args.batch_size
+    segment_size = args.segment_size
     rsz = (128, 128)
     train_data = input_fn(
         x_train,
@@ -369,12 +403,16 @@ def main():
     # TRAIN
     dt = datetime.now().strftime('%Y%m%d_%H%M%S')
     opt = tf.keras.optimizers.Adam()
-    save_path = f'data/model_checkpoints/ckpt.{dt}'
-    ckpt = tf.keras.callbacks.ModelCheckpoint(
-        filepath=save_path,
-        save_best_only=False,
-        save_weights_only=True
-    )
+    if args.save_checkpoints:
+        save_path = f'data/model_checkpoints/{dt}/ckpt'
+        ckpt = tf.keras.callbacks.ModelCheckpoint(
+            filepath=save_path,
+            save_best_only=False,
+            save_weights_only=True
+        )
+        ckpt = [ckpt]
+    else:
+        ckpt = []
     model.compile(
         optimizer=opt,
         loss='categorical_crossentropy',
@@ -382,12 +420,12 @@ def main():
     model.fit(
         x=train_data.repeat(),
         validation_data=test_data.repeat(),
-        epochs=1,
+        epochs=args.epochs,
         verbose=1,
         class_weight=class_weights,
         steps_per_epoch=len(x_train) // batch_size,
         validation_steps=len(x_test) // batch_size,
-        callbacks=[ckpt]
+        callbacks=ckpt
     )
 
     # EVAL

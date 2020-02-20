@@ -32,6 +32,7 @@ class DataPrep():
         self.flows = None
         self.rsz = rsz
 
+    @tf.function
     def getFrameSnippet(self, filepath, start_frame=None):
         cap = cv2.VideoCapture(filepath)
         frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -50,6 +51,7 @@ class DataPrep():
             j += 1
         cap.release()
 
+    @tf.function
     def getOpticalFlows(self):
         if self.frames is not None:
             self.flows = np.empty(
@@ -66,11 +68,13 @@ class DataPrep():
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
+    @tf.function
     def resize(self, frame):
         # TODO: will want to test different sizes here as a hyperparameter
         height, width = self.rsz
         return cv2.resize(frame, (height, width))
 
+    @tf.function
     def getFaces(self, frame, grayscale=True):
         orig_frame = frame
         if grayscale:
@@ -83,6 +87,7 @@ class DataPrep():
             faces = orig_frame
         return faces
 
+    @tf.function
     def getFaceRois(self, frame, faces):
         if isinstance(faces, np.ndarray):
             return self.resize(frame)
@@ -100,6 +105,7 @@ class DataPrep():
         face_rois = self.resize(face_rois)
         return face_rois
 
+    @tf.function
     def prepVid(self, filepath, start_frame=None):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
@@ -119,6 +125,7 @@ class DataPrep():
                 flow_rois[i - 1] = rois
         return rgb_rois, flow_rois
 
+    @tf.function
     def prepFullFrames(self, filepath, start_frame=None):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
@@ -140,6 +147,7 @@ class DataPrep():
 
 # %%
 
+@tf.function
 def input_fn(files, labels=None, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         if labels is not None:
@@ -200,6 +208,12 @@ def parseArgs(arg_list=None):
         action='store_true',
         help='whether or not to save checkpoints at each epoch'
     )
+    # parser.add_argument(
+    #     '--no_flow',
+    #     default=False,
+    #     action='store_true',
+    #     help='whether or not to include optical flows'
+    # )
     if arg_list is not None:
         args = parser.parse_args(arg_list)
     else:
@@ -214,10 +228,10 @@ def main():
     filepath = 'data/train_sample_videos'
     datapath = os.path.join(filepath, 'metadata.json')
     data = pd.read_json(datapath).T
-    files = [os.path.join(filepath, f) for f in data.index]
-    labels = data.label.values
-    # files = [os.path.join(filepath, f) for f in data.index][:20]
-    # labels = data.label.values[:20]
+    # files = [os.path.join(filepath, f) for f in data.index]
+    # labels = data.label.values
+    files = [os.path.join(filepath, f) for f in data.index][:20]
+    labels = data.label.values[:20]
     x_train, x_test, y_train, y_test = train_test_split(
         files, labels, test_size=0.1)
     class_weights = compute_class_weight(
@@ -232,8 +246,8 @@ def main():
 
     # validation data
     val_path = 'data/test_videos'
-    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
-    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
+    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
+    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
     print('number of validation files', len(val_files))
 
     # generate datasets

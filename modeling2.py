@@ -186,7 +186,7 @@ def parseArgs(arg_list=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--epochs',
-        default=10,
+        default=5,
         type=int,
         help='number of epochs to train'
     )
@@ -198,12 +198,18 @@ def parseArgs(arg_list=None):
     )
     parser.add_argument(
         '--segment_size',
-        default=10,
+        default=5,
         type=int,
         help='number of frames to slice from each video'
     )
     parser.add_argument(
         '--save_checkpoints',
+        default=False,
+        action='store_true',
+        help='whether or not to save checkpoints at each epoch'
+    )
+    parser.add_argument(
+        '--sample',
         default=False,
         action='store_true',
         help='whether or not to save checkpoints at each epoch'
@@ -234,10 +240,12 @@ def main():
     filepath = 'data/train_sample_videos'
     datapath = os.path.join(filepath, 'metadata.json')
     data = pd.read_json(datapath).T
-    # files = [os.path.join(filepath, f) for f in data.index]
-    # labels = data.label.values
-    files = [os.path.join(filepath, f) for f in data.index][:20]
-    labels = data.label.values[:20]
+    if args.sample:
+        files = [os.path.join(filepath, f) for f in data.index][:20]
+        labels = data.label.values[:20]
+    else:
+        files = [os.path.join(filepath, f) for f in data.index]
+        labels = data.label.values
     x_train, x_test, y_train, y_test = train_test_split(
         files, labels, test_size=float(args.test_split))
     class_weights = compute_class_weight(
@@ -252,8 +260,11 @@ def main():
 
     # validation data
     val_path = 'data/test_videos'
-    # val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
-    val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)][:8]
+    if args.sample:
+        val_files = [os.path.join(val_path, f)
+                     for f in os.listdir(val_path)][:8]
+    else:
+        val_files = [os.path.join(val_path, f) for f in os.listdir(val_path)]
     print('number of validation files', len(val_files))
 
     # generate datasets

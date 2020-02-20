@@ -32,7 +32,7 @@ class DataPrep():
         self.flows = None
         self.rsz = rsz
 
-    @tf.function
+    # @tf.function
     def getFrameSnippet(self, filepath, start_frame=None):
         cap = cv2.VideoCapture(filepath)
         frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -51,7 +51,7 @@ class DataPrep():
             j += 1
         cap.release()
 
-    @tf.function
+    # @tf.function
     def getOpticalFlows(self):
         if self.frames is not None:
             self.flows = np.empty(
@@ -68,13 +68,13 @@ class DataPrep():
                     prvs, frame, None, 0.5, 3, 15, 3, 5, 1.2, 0)
                 prvs = frame
 
-    @tf.function
+    # @tf.function
     def resize(self, frame):
         # TODO: will want to test different sizes here as a hyperparameter
         height, width = self.rsz
         return cv2.resize(frame, (height, width))
 
-    @tf.function
+    # @tf.function
     def getFaces(self, frame, grayscale=True):
         orig_frame = frame
         if grayscale:
@@ -87,7 +87,7 @@ class DataPrep():
             faces = orig_frame
         return faces
 
-    @tf.function
+    # @tf.function
     def getFaceRois(self, frame, faces):
         if isinstance(faces, np.ndarray):
             return self.resize(frame)
@@ -105,7 +105,7 @@ class DataPrep():
         face_rois = self.resize(face_rois)
         return face_rois
 
-    @tf.function
+    # @tf.function
     def prepVid(self, filepath, start_frame=None):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
@@ -125,7 +125,7 @@ class DataPrep():
                 flow_rois[i - 1] = rois
         return rgb_rois, flow_rois
 
-    @tf.function
+    # @tf.function
     def prepFullFrames(self, filepath, start_frame=None):
         self.getFrameSnippet(filepath, start_frame)
         self.getOpticalFlows()
@@ -147,7 +147,7 @@ class DataPrep():
 
 # %%
 
-@tf.function
+# @tf.function
 def input_fn(files, labels=None, segment_size=5, batch_size=1, rsz=(128, 128)):
     def dataGenerator():
         if labels is not None:

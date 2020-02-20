@@ -208,6 +208,12 @@ def parseArgs(arg_list=None):
         action='store_true',
         help='whether or not to save checkpoints at each epoch'
     )
+    parser.add_argument(
+        '--test_split',
+        default=0.1,
+        type=float,
+        help='whether or not to save checkpoints at each epoch'
+    )
     # parser.add_argument(
     #     '--no_flow',
     #     default=False,
@@ -233,7 +239,7 @@ def main():
     files = [os.path.join(filepath, f) for f in data.index][:20]
     labels = data.label.values[:20]
     x_train, x_test, y_train, y_test = train_test_split(
-        files, labels, test_size=0.1)
+        files, labels, test_size=float(args.test_split))
     class_weights = compute_class_weight(
         'balanced', np.unique(y_train), y_train)
     for k, v in zip(np.unique(y_train), class_weights):
